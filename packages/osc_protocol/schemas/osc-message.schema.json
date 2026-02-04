@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OSCMessage",
+  "type": "object",
+  "description": "OSC /dirt/play message with named params for SuperDirt.",
+  "properties": {
+    "address": {
+      "type": "string",
+      "description": "OSC address. For SuperDirt this is typically /dirt/play."
+    },
+    "params": {
+      "type": "object",
+      "description": "Named parameters for SuperDirt /dirt/play.",
+      "properties": {
+        "midinote": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 127,
+          "description": "MIDI note number 0..127. Mutually exclusive with n."
+        },
+        "n": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Sample index / pitch selection. Mutually exclusive with midinote."
+        },
+        "s": {
+          "type": "string",
+          "description": "Sampler/synth name (e.g. \"bd\", \"mySynth\")."
+        },
+        "sustain": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Note duration in seconds. Recommended: steps/16 * 1/cps * gate."
+        },
+        "speed": {
+          "type": "number",
+          "description": "Playback speed multiplier. Default 1.0."
+        },
+        "gain": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Output gain. Default 1.0."
+        },
+        "pan": {
+          "type": "number",
+          "minimum": -1,
+          "maximum": 1,
+          "description": "Stereo pan position. -1..1, default 0.0."
+        },
+        "orbit": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "SuperDirt orbit index (track/layer)."
+        },
+        "cps": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Cycles per second (bpm/240 for 4/4, 1 bar = 1 cycle)."
+        },
+        "cycle": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Bar number + intra-bar position."
+        },
+        "latency": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Forward scheduling latency in seconds."
+        },
+        "delta": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Relative delay in seconds from the scheduled time."
+        },
+        "begin": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Sample start position (ratio/seconds, implementation dependent)."
+        },
+        "end": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Sample end position (ratio/seconds, implementation dependent)."
+        }
+      },
+      "required": [
+        "sustain",
+        "cps",
+        "cycle"
+      ],
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "anyOf": [
+            { "required": ["midinote"] },
+            { "required": ["n"] }
+          ]
+        }
+      ]
+    }
+  },
+  "required": [
+    "address",
+    "params"
+  ],
+  "additionalProperties": false
+}
+

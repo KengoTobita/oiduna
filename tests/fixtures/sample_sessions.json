@@ -1,0 +1,83 @@
+{
+  "minimal_session": {
+    "environment": {
+      "bpm": 120,
+      "scale": "minor"
+    },
+    "tracks": []
+  },
+  "simple_session": {
+    "environment": {
+      "bpm": 120,
+      "scale": "minor"
+    },
+    "tracks": [
+      {
+        "id": "bd",
+        "sound": "bd",
+        "orbit": 0,
+        "gain": 1.0,
+        "pan": 0.5,
+        "muted": false,
+        "solo": false,
+        "sequence": [
+          {
+            "pitch": "0",
+            "length": 1
+          }
+        ]
+      }
+    ],
+    "scenes": []
+  },
+  "full_session": {
+    "environment": {
+      "bpm": 140,
+      "scale": "minor",
+      "gate": 0.9,
+      "chords": [[0, 4, 7]]
+    },
+    "tracks": [
+      {
+        "id": "bd",
+        "sound": "bd",
+        "orbit": 0,
+        "gain": 1.2,
+        "pan": 0.5,
+        "muted": false,
+        "solo": false,
+        "sequence": [
+          {"pitch": "0", "length": 0.5},
+          {"pitch": "~", "length": 0.5},
+          {"pitch": "0", "length": 0.5},
+          {"pitch": "~", "length": 0.5}
+        ]
+      },
+      {
+        "id": "hh",
+        "sound": "hh",
+        "orbit": 1,
+        "gain": 0.8,
+        "pan": 0.5,
+        "muted": false,
+        "solo": false,
+        "sequence": [
+          {"pitch": "12", "length": 0.25},
+          {"pitch": "12", "length": 0.25},
+          {"pitch": "12", "length": 0.25},
+          {"pitch": "12", "length": 0.25}
+        ]
+      }
+    ],
+    "scenes": [
+      {
+        "id": "main",
+        "name": "Main Scene",
+        "track_states": {
+          "bd": {"muted": false, "solo": false},
+          "hh": {"muted": false, "solo": false}
+        }
+      }
+    ]
+  }
+}
