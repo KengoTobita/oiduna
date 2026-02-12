@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oiduna Dashboard</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Oiduna Dashboard</h1>
+            <span id="overall-status" class="status-badge">接続確認中...</span>
+        </header>
+
+        <main class="grid">
+            <!-- SuperDirt接続状態 -->
+            <section class="card">
+                <h2>SuperDirt</h2>
+                <div class="status-row">
+                    <span id="superdirt-status" class="status-indicator">---</span>
+                    <span id="superdirt-host">---:---</span>
+                </div>
+            </section>
+
+            <!-- MIDI接続状態 -->
+            <section class="card">
+                <h2>MIDI</h2>
+                <div class="status-row">
+                    <span id="midi-status" class="status-indicator">---</span>
+                    <span id="midi-port">---</span>
+                </div>
+            </section>
+
+            <!-- Engine状態 -->
+            <section class="card">
+                <h2>Engine</h2>
+                <div class="status-row">
+                    <span id="engine-status" class="status-indicator">---</span>
+                    <span>BPM: <span id="engine-bpm">---</span></span>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>Oiduna API v0.1.0 | <a href="/docs">API ドキュメント</a></p>
+        </footer>
+    </div>
+
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>

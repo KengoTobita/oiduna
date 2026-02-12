@@ -1,5 +1,5 @@
 """API route modules"""
 
-from oiduna_api.routes import midi, playback, scene, stream, tracks
+from oiduna_api.routes import dashboard, midi, playback, scene, stream, tracks
 
-__all__ = ["playback", "stream", "tracks", "scene", "midi"]
+__all__ = ["dashboard", "playback", "stream", "tracks", "scene", "midi"]
