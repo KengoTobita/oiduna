@@ -24,7 +24,7 @@ MARS_for_oidunaは、Oidunaループエンジンのためのパターン記述DS
          │ HTTP POST /playback/pattern
          ↓
 ┌──────────────────┐
-│ Oiduna API       │  ← ループエンジン (port 8000)
+│ Oiduna API       │  ← ループエンジン (port 57122)
 │ - 既に実装済み    │
 └────────┬─────────┘
          │ OSC/MIDI
@@ -38,7 +38,7 @@ MARS_for_oidunaは、Oidunaループエンジンのためのパターン記述DS
 
 ### ベースURL
 ```
-http://localhost:8000
+http://localhost:57122
 ```
 
 ### 主要エンドポイント
@@ -283,7 +283,7 @@ MARS_for_oiduna/
        dsl_code = body["dsl"]
        session = compile_mars(dsl_code)
 
-       oiduna = OidunaClient("http://localhost:8000")
+       oiduna = OidunaClient("http://localhost:57122")
        oiduna.load_pattern(session)
 
        return {"status": "ok"}
@@ -411,7 +411,7 @@ def test_full_workflow():
     session = compile_mars(code)
 
     # Oidunaに送信
-    client = OidunaClient("http://localhost:8000")
+    client = OidunaClient("http://localhost:57122")
     client.load_pattern(session)
     client.start()
 
@@ -487,7 +487,7 @@ print(json.dumps(session, indent=2))
 
 ```bash
 # 直接curlでテスト
-curl -X POST http://localhost:8000/playback/pattern \
+curl -X POST http://localhost:57122/playback/pattern \
   -H "Content-Type: application/json" \
   -d @compiled_session.json
 ```
@@ -511,7 +511,7 @@ logger = logging.getLogger(__name__)
    - `/home/tobita/study/livecoding/oiduna/docs/distribution-guide.md`
 
 3. **Interactive Docs**
-   - Oiduna: http://localhost:8000/docs
+   - Oiduna: http://localhost:57122/docs
    - MARS: http://localhost:3000/docs (実装後)
 
 4. **外部ドキュメント**

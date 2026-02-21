@@ -1,0 +1,25 @@
+{
+  "version": "1.0",
+  "type": "pattern",
+  "metadata": {
+    "name": "Basic Kick",
+    "description": "Simple kick drum pattern",
+    "bpm": 120
+  },
+  "tracks": [
+    {
+      "track_id": "kick",
+      "instrument": "superkick",
+      "pattern": {
+        "type": "euclidean",
+        "steps": 16,
+        "hits": 4,
+        "rotation": 0
+      },
+      "params": {
+        "gain": 1.0,
+        "freq": 50
+      }
+    }
+  ]
+}

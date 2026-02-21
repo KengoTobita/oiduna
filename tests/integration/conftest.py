@@ -7,7 +7,7 @@ import httpx
 @pytest.fixture
 def base_url():
     """Base URL for integration tests"""
-    return "http://localhost:8000"
+    return "http://localhost:57122"
 
 
 @pytest.fixture

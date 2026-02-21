@@ -3,7 +3,7 @@
 
 set -e
 
-BASE_URL="http://localhost:8000"
+BASE_URL="http://localhost:57122"
 OIDUNA_DATA="./oiduna_data"
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -14,7 +14,7 @@ echo ""
 # Oiduna APIが起動しているか確認
 echo "1. Oiduna APIの確認..."
 if curl -s "$BASE_URL/health" > /dev/null 2>&1; then
-    echo "✓ Oiduna API起動中 (port 8000)"
+    echo "✓ Oiduna API起動中 (port 57122)"
 else
     echo "❌ Oiduna APIが起動していません"
     echo ""

@@ -1,0 +1,68 @@
+{
+  "version": "1.0",
+  "type": "pattern",
+  "metadata": {
+    "name": "Complex Pattern",
+    "description": "Multi-track pattern with polyrhythms",
+    "bpm": 128
+  },
+  "tracks": [
+    {
+      "track_id": "kick",
+      "instrument": "superkick",
+      "pattern": {
+        "type": "euclidean",
+        "steps": 16,
+        "hits": 5,
+        "rotation": 0
+      },
+      "params": {
+        "gain": 0.9,
+        "freq": 55
+      }
+    },
+    {
+      "track_id": "snare",
+      "instrument": "supersnare",
+      "pattern": {
+        "type": "euclidean",
+        "steps": 16,
+        "hits": 3,
+        "rotation": 4
+      },
+      "params": {
+        "gain": 0.7
+      }
+    },
+    {
+      "track_id": "hihat_closed",
+      "instrument": "superhat",
+      "pattern": {
+        "type": "euclidean",
+        "steps": 16,
+        "hits": 12,
+        "rotation": 0
+      },
+      "params": {
+        "gain": 0.4
+      }
+    },
+    {
+      "track_id": "hihat_open",
+      "instrument": "superhat",
+      "pattern": {
+        "type": "euclidean",
+        "steps": 16,
+        "hits": 3,
+        "rotation": 2
+      },
+      "params": {
+        "gain": 0.6,
+        "sustain": 0.5
+      }
+    }
+  ],
+  "global": {
+    "cps": 2.13
+  }
+}

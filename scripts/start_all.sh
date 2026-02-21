@@ -67,7 +67,7 @@ tmux send-keys -t "$SESSION_NAME:shell" "echo 'ウィンドウ切り替え: Ctrl
 tmux send-keys -t "$SESSION_NAME:shell" "echo 'セッション終了: Ctrl+b :kill-session'" C-m
 tmux send-keys -t "$SESSION_NAME:shell" "echo ''" C-m
 tmux send-keys -t "$SESSION_NAME:shell" "echo 'ステータス確認:'" C-m
-tmux send-keys -t "$SESSION_NAME:shell" "echo '  curl http://localhost:8000/health'" C-m
+tmux send-keys -t "$SESSION_NAME:shell" "echo '  curl http://localhost:57122/health'" C-m
 tmux send-keys -t "$SESSION_NAME:shell" "echo ''" C-m
 
 # SuperDirtウィンドウに戻る
@@ -83,7 +83,7 @@ echo "  tmux attach -t $SESSION_NAME"
 echo ""
 echo "ウィンドウ構成:"
 echo "  1. superdirt   - SuperDirt (OSC port 57120)"
-echo "  2. oiduna-api  - Oiduna API (HTTP port 8000)"
+echo "  2. oiduna-api  - Oiduna API (HTTP port 57122)"
 echo "  3. shell       - コマンドシェル"
 echo ""
 echo "操作方法:"

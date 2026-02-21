@@ -114,7 +114,7 @@ interface Sequence {
       "pan": 0.5,
       "mute": false,
       "solo": false,
-      "cutoff": 8000,
+      "cutoff": 57122,
       "resonance": 0.3,
       "sequence": [
         {"pitch": "0", "start": 0, "length": 0.5},
@@ -224,7 +224,7 @@ To use scenes, include them in the CompiledSession:
 
 Activate a scene with:
 ```bash
-curl -X POST http://localhost:8000/scene/activate \
+curl -X POST http://localhost:57122/scene/activate \
   -H "Content-Type: application/json" \
   -d '{"scene_id": "intro"}'
 ```

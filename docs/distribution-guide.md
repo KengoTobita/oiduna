@@ -44,7 +44,7 @@ uv sync
 uv run python -m oiduna_api.main
 ```
 
-Oiduna will be running at `http://localhost:8000`.
+Oiduna will be running at `http://localhost:57122`.
 
 ### 2. Create Your Distribution
 
@@ -108,7 +108,7 @@ import httpx
 from typing import Dict, Any
 
 class OidunaClient:
-    def __init__(self, base_url: str = "http://localhost:8000"):
+    def __init__(self, base_url: str = "http://localhost:57122"):
         self.base_url = base_url
         self.client = httpx.Client(base_url=base_url)
 
@@ -216,7 +216,7 @@ interface Event {
 }
 
 class OidunaClient {
-  constructor(private baseUrl: string = "http://localhost:8000") {}
+  constructor(private baseUrl: string = "http://localhost:57122") {}
 
   async loadPattern(session: CompiledSession): Promise<void> {
     const response = await fetch(`${this.baseUrl}/playback/pattern`, {
@@ -388,7 +388,7 @@ Listen to real-time state updates:
 import httpx
 
 def stream_oiduna_events():
-    with httpx.stream("GET", "http://localhost:8000/stream") as response:
+    with httpx.stream("GET", "http://localhost:57122/stream") as response:
         for line in response.iter_lines():
             if line.startswith("event:"):
                 event_type = line.split(":", 1)[1].strip()
@@ -588,7 +588,7 @@ compileAndSend :: Pattern -> IO ()
 compileAndSend pattern = do
   let session = toCompiledSession pattern
   let request = HTTP.setRequestBodyJSON session $
-                HTTP.parseRequest_ "POST http://localhost:8000/playback/pattern"
+                HTTP.parseRequest_ "POST http://localhost:57122/playback/pattern"
   _ <- HTTP.httpJSON request
   return ()
 
@@ -648,7 +648,7 @@ observer.start()
 - [API Examples](api-examples.md) - Complete API reference
 - [Data Model](data-model.md) - CompiledSession schema
 - [SuperDirt Docs](https://tidalcycles.org/docs/patternlib/tutorials/superdirt) - Audio parameters
-- Oiduna Interactive Docs: http://localhost:8000/docs
+- Oiduna Interactive Docs: http://localhost:57122/docs
 
 ## Support
 

@@ -19,13 +19,17 @@ class Settings(BaseSettings):
     # OSC Configuration
     osc_host: str = "127.0.0.1"
     osc_port: int = 57120
+    osc_receive_port: int = 57121
 
     # MIDI Configuration
     midi_port: str | None = None
 
     # API Configuration
     api_host: str = "0.0.0.0"
-    api_port: int = 8000
+    api_port: int = 57122
+
+    # SuperDirt Remote Control
+    superdirt_confirmation_timeout: float = 5.0
 
     # Testing Configuration
     run_stability_tests: bool = False

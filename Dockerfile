@@ -13,13 +13,13 @@ COPY pyproject.toml ./
 RUN uv sync --no-dev
 
 # Expose HTTP API port
-EXPOSE 8000
+EXPOSE 57122
 
 # Set environment variables
 ENV OSC_HOST=127.0.0.1
 ENV OSC_PORT=57120
 ENV API_HOST=0.0.0.0
-ENV API_PORT=8000
+ENV API_PORT=57122
 
 # Run oiduna
 CMD ["uv", "run", "python", "-m", "oiduna_api.main"]

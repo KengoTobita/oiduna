@@ -1,0 +1,27 @@
+[project]
+name = "oiduna-cli"
+version = "0.1.0"
+description = "Command-line interface for Oiduna API"
+requires-python = ">=3.11"
+dependencies = [
+    "oiduna-client>=0.1.0",
+    "click>=8.0.0",
+    "rich>=13.0.0",
+    "prompt-toolkit>=3.0.0",
+]
+
+[project.scripts]
+oiduna = "oiduna_cli.main:cli"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/oiduna_cli"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.0",
+    "pytest-asyncio>=1.3.0",
+]

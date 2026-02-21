@@ -115,7 +115,7 @@ s.reboot {
 Usage example:
 
 1. Upload a sample via Oiduna API:
-   curl -X POST http://localhost:8000/assets/samples \
+   curl -X POST http://localhost:57122/assets/samples \
      -F "file=@my_kick.wav" \
      -F "category=kicks"
 

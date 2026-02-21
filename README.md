@@ -42,14 +42,14 @@ uv run python -m oiduna_api.main # Oiduna API起動
 
 ```bash
 docker build -t oiduna .
-docker run -p 8000:8000 --network host oiduna
+docker run -p 57122:57122 --network host oiduna
 ```
 
 ## API Documentation
 
 - **[API Examples](docs/api-examples.md)** - Complete curl examples for all endpoints
 - **[Data Model](docs/data-model.md)** - Data structure reference
-- **[Interactive Docs](http://localhost:8000/docs)** - Swagger UI (when server is running)
+- **[Interactive Docs](http://localhost:57122/docs)** - Swagger UI (when server is running)
 
 ### Main Endpoints
 
@@ -78,7 +78,7 @@ docker run -p 8000:8000 --network host oiduna
 ### Example: Load a Pattern
 
 ```bash
-curl -X POST http://localhost:8000/playback/pattern \
+curl -X POST http://localhost:57122/playback/pattern \
   -H "Content-Type: application/json" \
   -d '{
     "environment": {"bpm": 120},
@@ -102,13 +102,13 @@ curl -X POST http://localhost:8000/playback/pattern \
 ### Example: Start Playback
 
 ```bash
-curl -X POST http://localhost:8000/playback/start
+curl -X POST http://localhost:57122/playback/start
 ```
 
 ### Example: Stream State
 
 ```bash
-curl http://localhost:8000/stream
+curl http://localhost:57122/stream
 ```
 
 ## Environment Variables
@@ -118,7 +118,7 @@ curl http://localhost:8000/stream
 | `OSC_HOST` | 127.0.0.1 | SuperDirt OSC host |
 | `OSC_PORT` | 57120 | SuperDirt OSC port |
 | `API_HOST` | 0.0.0.0 | API server host |
-| `API_PORT` | 8000 | API server port |
+| `API_PORT` | 57122 | API server port |
 | `MIDI_PORT` | - | MIDI output port name |
 
 ## Architecture

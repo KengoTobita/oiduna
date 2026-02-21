@@ -1,0 +1,24 @@
+{
+  "version": "1.0",
+  "type": "pattern",
+  "metadata": {
+    "name": "Basic Hi-Hat",
+    "description": "Simple hi-hat pattern",
+    "bpm": 120
+  },
+  "tracks": [
+    {
+      "track_id": "hihat",
+      "instrument": "superhat",
+      "pattern": {
+        "type": "euclidean",
+        "steps": 16,
+        "hits": 8,
+        "rotation": 0
+      },
+      "params": {
+        "gain": 0.6
+      }
+    }
+  ]
+}

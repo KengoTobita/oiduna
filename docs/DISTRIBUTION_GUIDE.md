@@ -268,7 +268,7 @@ class ApplyCommand:
 import httpx
 import json
 
-OIDUNA_URL = "http://localhost:8000"
+OIDUNA_URL = "http://localhost:57122"
 
 class OidunaClient:
     """Distribution側からOiduna Coreに接続するクライアント"""

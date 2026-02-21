@@ -93,7 +93,7 @@ cd /home/tobita/study/livecoding/oiduna
 ### 1. ヘルスチェック
 
 ```bash
-curl http://localhost:8000/health
+curl http://localhost:57122/health
 # → {"status": "ok"}
 ```
 
@@ -101,7 +101,7 @@ curl http://localhost:8000/health
 
 ```bash
 # パターンをロード
-curl -X POST http://localhost:8000/playback/pattern \
+curl -X POST http://localhost:57122/playback/pattern \
   -H "Content-Type: application/json" \
   -d '{
     "environment": {"bpm": 120},
@@ -125,7 +125,7 @@ curl -X POST http://localhost:8000/playback/pattern \
   }'
 
 # 再生開始
-curl -X POST http://localhost:8000/playback/start
+curl -X POST http://localhost:57122/playback/start
 ```
 
 🔊 音が鳴れば成功！
@@ -133,7 +133,7 @@ curl -X POST http://localhost:8000/playback/start
 ### 3. 停止
 
 ```bash
-curl -X POST http://localhost:8000/playback/stop
+curl -X POST http://localhost:57122/playback/stop
 ```
 
 ---
@@ -142,12 +142,12 @@ curl -X POST http://localhost:8000/playback/stop
 
 ```bash
 # サンプルをアップロード
-curl -X POST http://localhost:8000/assets/samples \
+curl -X POST http://localhost:57122/assets/samples \
   -F "file=@my_kick.wav" \
   -F "category=kicks"
 
 # パターンで使用
-curl -X POST http://localhost:8000/playback/pattern \
+curl -X POST http://localhost:57122/playback/pattern \
   -H "Content-Type: application/json" \
   -d '{
     "environment": {"bpm": 120},
@@ -192,8 +192,8 @@ kill <PID>
 cd /home/tobita/study/livecoding/oiduna
 uv sync
 
-# ポート8000が使用中でないか確認
-lsof -i :8000
+# ポート57122が使用中でないか確認
+lsof -i :57122
 ```
 
 ---
@@ -244,4 +244,4 @@ uv run python -m oiduna_api.main
 # 以降は sclang で自動起動
 ```
 
-どの方法でも、**SuperDirt (port 57120) + Oiduna API (port 8000)** が起動します！
+どの方法でも、**SuperDirt (port 57120) + Oiduna API (port 57122)** が起動します！

@@ -5,7 +5,7 @@ Complete examples for all HTTP endpoints.
 ## Base URL
 
 ```bash
-BASE_URL="http://localhost:8000"
+BASE_URL="http://localhost:57122"
 ```
 
 ## Health & Info
@@ -361,7 +361,7 @@ export MIDI_PORT="IAC Driver Bus 1"
 
 # API Configuration
 export API_HOST=0.0.0.0
-export API_PORT=8000
+export API_PORT=57122
 ```
 
 Or use a `.env` file:
@@ -370,12 +370,12 @@ OSC_HOST=127.0.0.1
 OSC_PORT=57120
 MIDI_PORT=IAC Driver Bus 1
 API_HOST=0.0.0.0
-API_PORT=8000
+API_PORT=57122
 ```
 
 ## Interactive API Documentation
 
 Oiduna provides automatic interactive API documentation:
 
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
+- **Swagger UI**: http://localhost:57122/docs
+- **ReDoc**: http://localhost:57122/redoc

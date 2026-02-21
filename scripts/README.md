@@ -188,8 +188,8 @@ Quarks.install("SuperDirt");
 lsof -i :57120
 kill <PID>
 
-# HTTPポート（8000）
-lsof -i :8000
+# HTTPポート（57122）
+lsof -i :57122
 kill <PID>
 ```
 
