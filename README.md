@@ -1,135 +1,377 @@
 # Oiduna
 
-Real-time SuperDirt/MIDI loop engine with HTTP API.
+**Real-time SuperDirt/MIDI loop engine with HTTP API**
 
-## Features
+Oiduna is a 256-step loop sequencer that receives pre-compiled patterns via HTTP and outputs to SuperDirt (OSC) and MIDI devices. It serves as the playback engine for live coding environments like MARS DSL.
 
-- HTTP REST API for remote control
-- SSE (Server-Sent Events) for real-time state
-- OSC output to SuperDirt
-- MIDI device support
-- Docker deployment
+---
+
+## Key Features
+
+- 🎵 **256-step fixed loop** - Simple, predictable timing
+- 🌐 **HTTP REST API** - Language-agnostic, curl-friendly
+- 🔊 **SuperDirt integration** - OSC output to SuperCollider
+- 🎹 **MIDI output** - Hardware synth support
+- 📡 **Server-Sent Events (SSE)** - Real-time state streaming
+- 🎛️ **Mixer & effects** - Built-in routing and spatial effects
+- 🔄 **O(1) event lookup** - Optimized for real-time performance
+
+---
 
 ## Quick Start
 
-### 方法1: 自動起動設定（推奨）
+### Prerequisites
+
+- **SuperCollider** with **SuperDirt** installed
+- **Python 3.13+** with **uv** package manager
+
+### Installation
 
 ```bash
-# 一度だけセットアップ
+cd /path/to/oiduna
+uv sync  # Install dependencies
+```
+
+### Launch Oiduna
+
+Choose one of three methods:
+
+#### Method 1: Auto-Startup (Recommended)
+
+**One-time setup:**
+```bash
 ./scripts/setup_superdirt.sh
-
-# 以降は簡単起動
-sclang                           # SuperDirt自動起動
-uv run python -m oiduna_api.main # Oiduna API起動
 ```
 
-### 方法2: スクリプト起動
-
+**Then start easily:**
 ```bash
-./scripts/start_superdirt.sh     # SuperDirt起動
-uv run python -m oiduna_api.main # Oiduna API起動
+# Terminal 1: SuperDirt (auto-configured)
+sclang
+
+# Terminal 2: Oiduna API
+uv run python -m oiduna_api.main
 ```
 
-### 方法3: 統合起動（tmux）
+#### Method 2: Script Startup
 
 ```bash
-./scripts/start_all.sh  # SuperDirt + Oiduna APIを一発起動
+# Terminal 1: SuperDirt
+./scripts/start_superdirt.sh
+
+# Terminal 2: Oiduna API
+uv run python -m oiduna_api.main
 ```
 
-詳細: [Quick Start Guide](docs/quick-start.md)
-
-### Docker
+#### Method 3: Unified Startup (tmux)
 
 ```bash
-docker build -t oiduna .
-docker run -p 57122:57122 --network host oiduna
+./scripts/start_all.sh  # Launches SuperDirt + Oiduna in tmux
 ```
 
-## API Documentation
+**tmux controls:**
+- Switch windows: `Ctrl+b n` (next), `Ctrl+b p` (previous)
+- Detach: `Ctrl+b d`
+- Re-attach: `tmux attach -t oiduna`
+- Exit: `Ctrl+b :kill-session`
 
-- **[API Examples](docs/api-examples.md)** - Complete curl examples for all endpoints
-- **[Data Model](docs/data-model.md)** - Data structure reference
-- **[Interactive Docs](http://localhost:57122/docs)** - Swagger UI (when server is running)
-
-### Main Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check |
-| `/playback/pattern` | POST | Load compiled session pattern |
-| `/playback/start` | POST | Start playback |
-| `/playback/stop` | POST | Stop playback |
-| `/playback/pause` | POST | Pause playback |
-| `/playback/bpm` | POST | Change BPM |
-| `/playback/status` | GET | Get current playback status |
-| `/tracks` | GET | List all tracks |
-| `/tracks/{id}` | GET | Get track details |
-| `/tracks/{id}/mute` | POST | Mute/unmute track |
-| `/tracks/{id}/solo` | POST | Solo/unsolo track |
-| `/scene/activate` | POST | Activate scene |
-| `/midi/ports` | GET | List MIDI ports |
-| `/midi/port` | POST | Select MIDI port |
-| `/midi/panic` | POST | MIDI panic (all notes off) |
-| `/stream` | GET (SSE) | Real-time state stream |
-| `/assets/samples` | POST | Upload custom samples |
-| `/assets/samples` | GET | List uploaded samples |
-| `/assets/synthdefs` | POST | Upload SynthDefs |
-
-### Example: Load a Pattern
+### Verify Installation
 
 ```bash
-curl -X POST http://localhost:57122/playback/pattern \
+# Health check
+curl http://localhost:57122/health
+# → {"status": "ok"}
+
+# Load a simple pattern
+curl -X POST http://localhost:57122/playback/session \
   -H "Content-Type: application/json" \
   -d '{
     "environment": {"bpm": 120},
     "tracks": {
-      "bd": {
-        "sound": "bd",
-        "orbit": 0,
-        "gain": 1.0,
-        "pan": 0.5,
-        "mute": false,
-        "solo": false,
-        "sequence": [
-          {"pitch": "0", "start": 0, "length": 1}
+      "kick": {
+        "meta": {"track_id": "kick", "mute": false, "solo": false},
+        "params": {"s": "bd", "gain": 1.0, "pan": 0.5, "orbit": 0},
+        "fx": {}, "track_fx": {}, "sends": []
+      }
+    },
+    "tracks_midi": {},
+    "mixer_lines": {},
+    "sequences": {
+      "kick": {
+        "track_id": "kick",
+        "events": [
+          {"step": 0, "velocity": 1.0},
+          {"step": 4, "velocity": 1.0},
+          {"step": 8, "velocity": 1.0},
+          {"step": 12, "velocity": 1.0}
         ]
       }
     },
-    "sequences": {}
+    "scenes": {},
+    "apply": null
   }'
-```
 
-### Example: Start Playback
-
-```bash
+# Start playback
 curl -X POST http://localhost:57122/playback/start
+
+# 🔊 You should hear a kick drum!
+
+# Stop playback
+curl -X POST http://localhost:57122/playback/stop
 ```
 
-### Example: Stream State
+---
 
-```bash
-curl http://localhost:57122/stream
+## Documentation
+
+### Getting Started
+
+- **[OIDUNA_CONCEPTS.md](oiduna/docs/OIDUNA_CONCEPTS.md)** - What is Oiduna? Core concepts and terminology
+- **[TERMINOLOGY.md](oiduna/docs/TERMINOLOGY.md)** - Glossary of terms
+
+### Architecture & Design
+
+- **[ARCHITECTURE.md](oiduna/docs/ARCHITECTURE.md)** - System design, 4-layer IR, data flow, ADRs
+- **[DATA_MODEL_REFERENCE.md](oiduna/docs/DATA_MODEL_REFERENCE.md)** - Complete IR model specification
+- **[PERFORMANCE.md](oiduna/docs/PERFORMANCE.md)** - Performance characteristics and optimization
+
+### API & Usage
+
+- **[API_REFERENCE.md](oiduna/docs/API_REFERENCE.md)** - All 22 HTTP endpoints with examples
+- **[USAGE_PATTERNS.md](oiduna/docs/USAGE_PATTERNS.md)** - Common use cases and patterns
+- **[Interactive Docs](http://localhost:57122/docs)** - Swagger UI (when server running)
+
+### Development
+
+- **[DEVELOPMENT_GUIDE.md](oiduna/docs/DEVELOPMENT_GUIDE.md)** - Setup, testing, contribution guide
+- **[DISTRIBUTION_GUIDE.md](oiduna/docs/DISTRIBUTION_GUIDE.md)** - Building custom Distributions (DSLs)
+
+---
+
+## Architecture Overview
+
 ```
+┌─────────────────────────────────────────┐
+│ Distribution (e.g., MARS DSL)           │
+│  - DSL parsing                          │
+│  - Music theory (scales, chords)       │
+│  - Compile to IR                        │
+└──────────────┬──────────────────────────┘
+               │ HTTP POST (JSON)
+               ↓
+┌─────────────────────────────────────────┐
+│ Oiduna Core                             │
+│  - 256-step loop engine                 │
+│  - OSC/MIDI output                      │
+│  - No music theory (just note numbers)  │
+└──────────────┬──────────────────────────┘
+               │
+        ┌──────┴──────┐
+        ↓             ↓
+  SuperDirt        MIDI Device
+  (audio)          (hardware)
+```
+
+### 4-Layer IR Model
+
+Oiduna uses a layered Intermediate Representation:
+
+1. **🌍 Environment Layer** - Global settings (BPM, swing)
+2. **🎛️ Configuration Layer** - Tracks, MIDI, mixer routing
+3. **🎵 Pattern Layer** - Time-based events (when to play what)
+4. **🎮 Control Layer** - Scenes, timing control
+
+See [ARCHITECTURE.md](oiduna/docs/ARCHITECTURE.md) for details.
+
+---
+
+## Main API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check |
+| `/playback/session` | POST | Load compiled session |
+| `/playback/start` | POST | Start playback |
+| `/playback/stop` | POST | Stop playback |
+| `/playback/status` | GET | Get current status |
+| `/playback/environment` | PATCH | Update BPM, swing, etc. |
+| `/playback/tracks/{id}/params` | PATCH | Update track parameters |
+| `/playback/trigger/osc` | POST | Manual OSC trigger |
+| `/playback/trigger/midi` | POST | Manual MIDI trigger |
+| `/session/clients/{id}/metadata` | POST | Share client metadata |
+| `/session/clients` | GET | Get all client metadata |
+| `/tracks` | GET | List all tracks |
+| `/tracks/{id}/mute` | POST | Mute/unmute track |
+| `/scene/activate` | POST | Switch scene |
+| `/midi/ports` | GET | List MIDI ports |
+| `/stream` | GET (SSE) | Real-time event stream |
+
+See [API_REFERENCE.md](oiduna/docs/API_REFERENCE.md) for complete documentation.
+
+---
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `OSC_HOST` | 127.0.0.1 | SuperDirt OSC host |
-| `OSC_PORT` | 57120 | SuperDirt OSC port |
-| `API_HOST` | 0.0.0.0 | API server host |
-| `API_PORT` | 57122 | API server port |
-| `MIDI_PORT` | - | MIDI output port name |
+Configure via `.env` file or environment:
 
-## Architecture
+```bash
+OSC_HOST=127.0.0.1       # SuperDirt OSC host
+OSC_PORT=57120           # SuperDirt OSC port
+API_HOST=0.0.0.0         # API server bind address
+API_PORT=57122           # API server port
+MIDI_PORT=               # MIDI output port name (optional)
+```
 
-Oiduna consists of two main packages:
+---
 
-- **oiduna_loop** - Core loop engine with SuperDirt/MIDI support
-- **oiduna_api** - FastAPI HTTP server wrapping the engine
+## Docker Deployment
 
-The API uses Pydantic for request/response validation and provides automatic OpenAPI documentation at `/docs` and `/redoc`.
+```bash
+# Build
+docker build -t oiduna .
+
+# Run
+docker run -p 57122:57122 --network host oiduna
+```
+
+---
+
+## Project Structure
+
+```
+oiduna/
+├── packages/
+│   ├── oiduna_core/          # Core engine & IR models
+│   │   ├── ir/               # 4-layer data models
+│   │   ├── engine/           # Loop engine (5 tasks)
+│   │   ├── output/           # OSC/MIDI senders
+│   │   └── modulation/       # Parameter automation
+│   │
+│   └── oiduna_api/           # HTTP API server
+│       ├── routes/           # FastAPI endpoints
+│       └── main.py           # Entry point
+│
+├── docs/                     # Documentation
+├── scripts/                  # Startup scripts
+└── tests/                    # Test suites
+```
+
+---
+
+## Development
+
+### Run with Auto-reload
+
+```bash
+uv run python -m oiduna_api.main
+# Uvicorn watches for code changes and reloads automatically
+```
+
+### Run Tests
+
+```bash
+uv run pytest
+```
+
+### Type Checking
+
+```bash
+uv run mypy packages/
+```
+
+---
+
+## Troubleshooting
+
+### SuperDirt won't start
+
+```supercollider
+// In SuperCollider
+Quarks.update;
+Quarks.install("SuperDirt");
+0.exit;
+```
+
+### OSC port already in use
+
+```bash
+lsof -i :57120  # Check what's using port 57120
+kill <PID>      # Kill the process if needed
+```
+
+### API won't start
+
+```bash
+uv sync         # Reinstall dependencies
+lsof -i :57122  # Check if port 57122 is in use
+```
+
+---
+
+## Use Cases
+
+- **Live Coding** - MARS DSL, TidalCycles-like languages
+- **Algorithmic Composition** - Python scripts generating patterns
+- **MIDI Sequencing** - Control hardware synthesizers
+- **Interactive Installations** - HTTP API from any language
+- **Collaborative Performance** - Client metadata sharing for B2B sessions
+
+---
+
+## Design Philosophy
+
+> "We can't do that technically" → Never
+> "Standard approaches should be surprisingly easy" → Always
+> "Non-standard approaches possible with Distribution adjustments" → Flexible
+
+Oiduna is intentionally minimal:
+- Fixed 256-step loop (no variable lengths)
+- No DSL parsing (receives compiled IR only)
+- No music theory (works with MIDI note numbers)
+- No audio generation (delegates to SuperDirt)
+
+This simplicity enables **complex creativity at higher layers** (Distributions).
+
+---
+
+## Related Projects
+
+- **MARS DSL** - Primary Distribution for Oiduna
+- **SuperDirt** - Audio engine (SuperCollider Quark)
+- **TidalCycles** - Inspiration for live coding patterns
+
+---
 
 ## License
 
 MIT
+
+---
+
+## Contributing
+
+See [DEVELOPMENT_GUIDE.md](oiduna/docs/DEVELOPMENT_GUIDE.md) for:
+- Development environment setup
+- Code contribution guidelines
+- Testing procedures
+- Documentation standards
+
+---
+
+## Version
+
+**Oiduna Core**: v1.0
+**API Version**: v1.0
+**Last Updated**: 2026-02-24
+
+---
+
+## Links
+
+- **Documentation**: [/docs](oiduna/docs/)
+- **API Docs (Swagger)**: http://localhost:57122/docs
+- **API Docs (ReDoc)**: http://localhost:57122/redoc
+- **GitHub Issues**: (Add your repo URL here)
+
+---
+
+**Oiduna** - Simple, stable, fast. Built for live coding.
