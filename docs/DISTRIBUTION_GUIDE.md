@@ -446,3 +446,30 @@ dependencies = [
 ```
 
 **注意**: `pyzmq` は含まない。Oiduna Core自体にはIPC不要。
+
+---
+
+## 関連ドキュメント
+
+### Oiduna ドキュメント
+
+- [DATA_MODEL_REFERENCE.md](DATA_MODEL_REFERENCE.md) - CompiledSession IRの完全仕様
+- [API_REFERENCE.md](API_REFERENCE.md) - HTTP APIエンドポイント全仕様
+- [ARCHITECTURE.md](ARCHITECTURE.md) - Oidunaのアーキテクチャと設計判断
+
+### MARS Distribution ドキュメント
+
+- [MARS README](../../MARS_for_oiduna/README.md) - MARS Distributionの概要
+- [MARS Docs](../../MARS_for_oiduna/docs/) - MARSドキュメント一覧（準備中）
+  - COMPILER_GUIDE.md - MARSコンパイラ実装ガイド（準備中）
+  - MARS_TO_OIDUNA.md - DSL→IR変換詳細（準備中）
+
+### ワークスペースレベルドキュメント
+
+- [ADR-001: Separation of Concerns](../../docs/ADR/001-separation-of-concerns.md) - Oiduna/MARS分離の設計判断
+- [ADR-002: HTTP API Choice](../../docs/ADR/002-http-api-choice.md) - HTTP API採用理由
+- [ARCHITECTURE_EVOLUTION.md](../../docs/ARCHITECTURE_EVOLUTION.md) - MARS→Oiduna分離の経緯
+
+---
+
+**Last Updated**: 2026-02-24
