@@ -4,6 +4,16 @@ Oidunaをスマートに起動するためのスクリプト集。
 
 ## スクリプト一覧
 
+### ネットワーク構成 (oiduna-hotspot)
+
+Wi-Fiアクセスポイント設定やローカルDNS構成が必要な場合は、別リポジトリの拡張機能を使用してください:
+
+- **[oiduna-hotspot](https://github.com/KengoTobita/oiduna-hotspot)** - Ubuntu Desktop Wi-Fi hotspot setup for Oiduna
+
+この拡張により、Distribution（MARS DSLなど）を別PCで実行し、Wi-Fi経由でOidunaサーバーに接続できます。
+
+---
+
 ### setup_superdirt.sh
 
 SuperColliderの自動起動を設定します（一度だけ実行）。

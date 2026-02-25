@@ -145,6 +145,7 @@ curl -X POST http://localhost:57122/playback/stop
 - **[DEVELOPMENT_GUIDE.md](oiduna/docs/DEVELOPMENT_GUIDE.md)** - Setup, testing, contribution guide
 - **[DISTRIBUTION_GUIDE.md](oiduna/docs/DISTRIBUTION_GUIDE.md)** - Building custom Distributions (DSLs)
 
+
 ---
 
 ## Architecture Overview
@@ -314,6 +315,7 @@ lsof -i :57122  # Check if port 57122 is in use
 - **MIDI Sequencing** - Control hardware synthesizers
 - **Interactive Installations** - HTTP API from any language
 - **Collaborative Performance** - Client metadata sharing for B2B sessions
+- **Network-based Setup** - Wi-Fi AP mode for wireless Distribution clients (see [oiduna-hotspot](https://github.com/KengoTobita/oiduna-hotspot) extension)
 
 ---
 
