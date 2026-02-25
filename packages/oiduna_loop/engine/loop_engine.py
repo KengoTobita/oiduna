@@ -45,6 +45,28 @@ from .clock_generator import ClockGenerator
 from .note_scheduler import NoteScheduler
 from .step_processor import StepProcessor
 
+# New destination-based architecture imports
+from pathlib import Path
+
+try:
+    from oiduna_scheduler.scheduler_models import ScheduledMessageBatch
+    from oiduna_scheduler.scheduler import MessageScheduler
+    from oiduna_scheduler.router import DestinationRouter
+    from oiduna_scheduler.senders import OscDestinationSender, MidiDestinationSender
+    from oiduna_destination.destination_models import OscDestinationConfig, MidiDestinationConfig
+    from oiduna_destination.loader import load_destinations_from_file
+except ImportError:
+    # Fallback for local development
+    import sys
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent / "oiduna_scheduler"))
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent / "oiduna_destination"))
+    from scheduler_models import ScheduledMessageBatch
+    from scheduler import MessageScheduler
+    from router import DestinationRouter
+    from senders import OscDestinationSender, MidiDestinationSender
+    from destination_models import OscDestinationConfig, MidiDestinationConfig
+    from loader import load_destinations_from_file
+
 logger = logging.getLogger(__name__)
 
 
@@ -79,6 +101,7 @@ class LoopEngine:
         midi: MidiOutput,
         commands: CommandSource,
         publisher: StateSink,
+        before_send_hooks: list | None = None,
     ):
         """
         Initialize LoopEngine with injected dependencies.
@@ -88,6 +111,9 @@ class LoopEngine:
             midi: MIDI output (MidiSender or mock)
             commands: Command source (CommandReceiver or mock)
             publisher: State sink (StatePublisher or mock)
+            before_send_hooks: Optional hooks for message transformation before sending.
+                Each hook is called with (messages, current_bpm, current_step) -> messages.
+                Provided by extension system for runtime transformations (e.g., cps injection).
         """
         # State (v5: RuntimeState with CompiledSession)
         self.state = RuntimeState()
@@ -131,6 +157,14 @@ class LoopEngine:
             "osc": False,
         }
 
+        # New destination-based architecture (Milestone 3)
+        self._message_scheduler = MessageScheduler()
+        self._destination_router = DestinationRouter()
+        self._destinations_loaded = False
+
+        # Extension hooks (API layer integration)
+        self._before_send_hooks = before_send_hooks or []
+
     # ================================================================
     # Lifecycle
     # ================================================================
@@ -151,6 +185,9 @@ class LoopEngine:
 
         # Register command handlers
         self._register_handlers()
+
+        # Load destination configurations (new architecture)
+        self._load_destinations()
 
         logger.info("Loop engine started")
 
@@ -173,6 +210,7 @@ class LoopEngine:
     def _register_handlers(self) -> None:
         """Register command handlers"""
         self._commands.register_handler("compile", self._handle_compile)
+        self._commands.register_handler("session", self._handle_session)  # New destination-based API
         self._commands.register_handler("play", self._handle_play)
         self._commands.register_handler("stop", self._handle_stop)
         self._commands.register_handler("pause", self._handle_pause)
@@ -184,6 +222,73 @@ class LoopEngine:
         self._commands.register_handler("panic", self._handle_panic)
         self._commands.register_handler("scene", self._handle_scene)
         self._commands.register_handler("scenes", self._handle_scenes)
+
+    def _load_destinations(self) -> None:
+        """
+        Load destination configurations and register senders.
+
+        Reads destinations.yaml and creates appropriate senders
+        (OscDestinationSender, MidiDestinationSender) for each destination.
+
+        If configuration file is not found, logs a warning but continues.
+        The new destination-based API will not work without this.
+        """
+        config_path = Path("destinations.yaml")
+
+        if not config_path.exists():
+            logger.warning(
+                f"Destination config file not found: {config_path}. "
+                "New destination-based API (/playback/session) will not work. "
+                "Using legacy /playback/pattern endpoint is still supported."
+            )
+            return
+
+        try:
+            # Load and validate destination configurations
+            destinations = load_destinations_from_file(config_path)
+            logger.info(f"Loaded {len(destinations)} destination(s) from {config_path}")
+
+            # Register each destination with appropriate sender
+            for dest_id, dest_config in destinations.items():
+                if isinstance(dest_config, OscDestinationConfig):
+                    # Create OSC sender
+                    sender = OscDestinationSender(
+                        host=dest_config.host,
+                        port=dest_config.port,
+                        address=dest_config.address,
+                        use_bundle=dest_config.use_bundle,
+                    )
+                    self._destination_router.register_destination(dest_id, sender)
+                    logger.info(
+                        f"Registered OSC destination '{dest_id}': "
+                        f"{dest_config.host}:{dest_config.port}{dest_config.address}"
+                    )
+
+                elif isinstance(dest_config, MidiDestinationConfig):
+                    # Create MIDI sender
+                    try:
+                        sender = MidiDestinationSender(
+                            port_name=dest_config.port_name,
+                            default_channel=dest_config.default_channel,
+                        )
+                        self._destination_router.register_destination(dest_id, sender)
+                        logger.info(
+                            f"Registered MIDI destination '{dest_id}': "
+                            f"{dest_config.port_name} (ch {dest_config.default_channel})"
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to open MIDI destination '{dest_id}': {e}. "
+                            "Skipping this destination."
+                        )
+                        continue
+
+            self._destinations_loaded = True
+            logger.info("Destination routing system initialized")
+
+        except Exception as e:
+            logger.error(f"Failed to load destinations: {e}", exc_info=True)
+            logger.warning("Destination-based API will not be available")
 
     # ================================================================
     # Command Handlers
@@ -239,6 +344,54 @@ class LoopEngine:
                 timing=timing,
                 track_ids=track_ids,
             )
+
+        return CommandResult.ok()
+
+    def _handle_session(self, payload: dict[str, Any]) -> CommandResult:
+        """
+        Load session using new destination-based API (Milestone 3).
+
+        Accepts ScheduledMessageBatch format with generic messages
+        that route to configured destinations.
+
+        Args:
+            payload: Dict with keys:
+                - messages: List of {destination_id, cycle, step, params}
+                - bpm: Tempo (optional, default 120.0)
+                - pattern_length: Pattern length in cycles (optional, default 4.0)
+        """
+        # Check if destinations are loaded
+        if not self._destinations_loaded:
+            return CommandResult.error(
+                "Destination configuration not loaded. "
+                "Ensure destinations.yaml exists and is valid. "
+                "Cannot use session-based API without destination configuration."
+            )
+
+        # Parse and validate the batch
+        try:
+            batch = ScheduledMessageBatch.from_dict(payload)
+        except Exception as e:
+            return CommandResult.error(f"Invalid session payload: {e}")
+
+        # Load messages into scheduler
+        logger.info(
+            f"Loading session: {len(batch.messages)} messages, "
+            f"BPM={batch.bpm}, length={batch.pattern_length} cycles"
+        )
+
+        self._message_scheduler.load_messages(batch)
+
+        # Update BPM in state (for compatibility with existing code)
+        self.state.bpm = batch.bpm
+
+        # Send status update
+        self._schedule_status_update()
+
+        logger.info(
+            f"Session loaded successfully: {self._message_scheduler.message_count} messages "
+            f"across {len(self._message_scheduler.occupied_steps)} steps"
+        )
 
         return CommandResult.ok()
 
@@ -818,6 +971,30 @@ class LoopEngine:
                     # Send updated track info for Monitor display
                     await self._publisher.send_tracks(self._get_tracks_info())
 
+                # === New destination-based architecture ===
+                # Process messages from MessageScheduler (if loaded)
+                if self._destinations_loaded and self._message_scheduler.message_count > 0:
+                    current_step = self.state.position.step
+                    scheduled_messages = self._message_scheduler.get_messages_at_step(current_step)
+
+                    if scheduled_messages:
+                        logger.debug(
+                            f"Step {current_step}: sending {len(scheduled_messages)} "
+                            "scheduled messages via destination router"
+                        )
+
+                        # Apply extension hooks (e.g., cps injection)
+                        # Extensions modify messages just before sending
+                        for hook in self._before_send_hooks:
+                            scheduled_messages = hook(
+                                scheduled_messages,
+                                self.state.bpm,
+                                current_step
+                            )
+
+                        self._destination_router.send_messages(scheduled_messages)
+
+                # === Legacy StepProcessor (keep for compatibility) ===
                 # Process current step (delegated to StepProcessor)
                 # Uses Output IR (Layer 3) for OSC/MIDI events
                 step_output = self._step_processor.process_step_v2(self.state)

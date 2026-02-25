@@ -42,8 +42,18 @@ class LoopService:
         osc_port: int = 57120,
         receive_port: int = 57121,
         midi_port_name: str | None = None,
+        before_send_hooks: list | None = None,
     ) -> None:
-        """Initialize the loop engine with in-process IPC"""
+        """
+        Initialize the loop engine with in-process IPC.
+
+        Args:
+            osc_host: OSC host for SuperDirt
+            osc_port: OSC port for SuperDirt
+            receive_port: Receive port (not yet implemented)
+            midi_port_name: MIDI port name
+            before_send_hooks: Extension hooks from API layer
+        """
         if self._engine is not None:
             return
 
@@ -53,6 +63,7 @@ class LoopService:
             osc_port=osc_port,
             midi_port=midi_port_name,
             state_sink=self._state_sink,
+            before_send_hooks=before_send_hooks,
         )
         # receive_port is for Phase 1 SuperDirt integration (not yet implemented)
 
@@ -93,8 +104,18 @@ async def lifespan(
     osc_port: int = 57120,
     receive_port: int = 57121,
     midi_port_name: str | None = None,
+    before_send_hooks: list | None = None,
 ) -> AsyncGenerator[None, None]:
-    """Lifespan context manager for FastAPI"""
+    """
+    Lifespan context manager for FastAPI.
+
+    Args:
+        osc_host: OSC host for SuperDirt
+        osc_port: OSC port for SuperDirt
+        receive_port: Receive port (not yet implemented)
+        midi_port_name: MIDI port name
+        before_send_hooks: Extension hooks from API layer
+    """
     global _loop_service
     _loop_service = LoopService()
     _loop_service.initialize(
@@ -102,6 +123,7 @@ async def lifespan(
         osc_port=osc_port,
         receive_port=receive_port,
         midi_port_name=midi_port_name,
+        before_send_hooks=before_send_hooks,
     )
     engine = _loop_service.get_engine()
     engine.start()

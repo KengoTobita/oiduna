@@ -22,6 +22,7 @@ def create_loop_engine(
     midi_port: str | None = None,
     command_source: CommandSource | None = None,
     state_sink: StateSink | None = None,
+    before_send_hooks: list | None = None,
 ) -> LoopEngine:
     """
     Create a production LoopEngine with real I/O dependencies.
@@ -32,6 +33,7 @@ def create_loop_engine(
         midi_port: MIDI output port name (None for first available)
         command_source: CommandSource implementation (default: NoopCommandSource)
         state_sink: StateSink implementation (default: InProcessStateSink)
+        before_send_hooks: Extension hooks for runtime message transformation
 
     Returns:
         Configured LoopEngine instance
@@ -52,4 +54,5 @@ def create_loop_engine(
         midi=midi,
         commands=commands,
         publisher=publisher,
+        before_send_hooks=before_send_hooks,
     )

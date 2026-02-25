@@ -3,6 +3,7 @@
 Real-time SuperDirt/MIDI loop engine with HTTP REST API.
 """
 
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -12,20 +13,57 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from oiduna_api.config import settings
+from oiduna_api.extensions import discover_extensions
 from oiduna_api.routes import assets, dashboard, midi, patterns, playback, scene, stream, tracks
 from oiduna_api.services.loop_service import LoopService, get_loop_service, lifespan
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan_wrapper(app: FastAPI):
-    """FastAPI lifespan manager"""
+    """
+    FastAPI lifespan manager with extension system integration.
+
+    Lifecycle:
+    1. Auto-discover extensions via entry_points
+    2. Run extension startup hooks
+    3. Collect runtime hooks for loop_engine
+    4. Start loop_engine with hooks
+    5. Register extension routers
+    6. [App runs]
+    7. Stop loop_engine
+    8. Run extension shutdown hooks
+    """
+    # 1. Auto-discover and register extensions
+    pipeline = discover_extensions()
+    app.state.extension_pipeline = pipeline
+
+    # 2. Run extension startup hooks
+    await pipeline.startup_all()
+
+    # 3. Collect runtime hooks
+    before_send_hooks = pipeline.get_send_hooks()
+
+    # 4. Start loop_engine with extension hooks
     async with lifespan(
         osc_host=settings.osc_host,
         osc_port=settings.osc_port,
         receive_port=settings.osc_receive_port,
         midi_port_name=settings.midi_port,
+        before_send_hooks=before_send_hooks,
     ):
+        # 5. Register extension routers (must be before app starts accepting requests)
+        for name, ext in pipeline.extensions:
+            router = ext.get_router()
+            if router is not None:
+                app.include_router(router)
+                logger.info(f"Registered router from extension: {name}")
+
         yield
+
+        # 6. Run extension shutdown hooks
+        await pipeline.shutdown_all()
 
 
 # Create FastAPI app
