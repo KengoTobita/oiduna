@@ -26,15 +26,12 @@ from pydantic import ValidationError
 
 from ..commands import (
     BpmCommand,
-    CompileCommand,
     MidiPanicCommand,
     MidiPortCommand,
     MuteCommand,
     PanicCommand,
     PauseCommand,
     PlayCommand,
-    SceneCommand,
-    ScenesCommand,
     SoloCommand,
     StopCommand,
 )
@@ -43,8 +40,6 @@ from ..result import CommandResult
 from ..state import PlaybackState, RuntimeState
 from .clock_generator import ClockGenerator
 from .note_scheduler import NoteScheduler
-from ..converters import SessionToMessagesConverter
-
 # New destination-based architecture imports
 from pathlib import Path
 
@@ -160,7 +155,6 @@ class LoopEngine:
         self._message_scheduler = MessageScheduler()
         self._destination_router = DestinationRouter()
         self._destinations_loaded = False
-        self._session_converter = SessionToMessagesConverter()
 
         # Extension hooks (API layer integration)
         self._before_send_hooks = before_send_hooks or []
@@ -209,7 +203,6 @@ class LoopEngine:
 
     def _register_handlers(self) -> None:
         """Register command handlers"""
-        self._commands.register_handler("compile", self._handle_compile)
         self._commands.register_handler("session", self._handle_session)  # New destination-based API
         self._commands.register_handler("play", self._handle_play)
         self._commands.register_handler("stop", self._handle_stop)
@@ -220,8 +213,6 @@ class LoopEngine:
         self._commands.register_handler("midi_port", self._handle_midi_port)
         self._commands.register_handler("midi_panic", self._handle_midi_panic)
         self._commands.register_handler("panic", self._handle_panic)
-        self._commands.register_handler("scene", self._handle_scene)
-        self._commands.register_handler("scenes", self._handle_scenes)
 
     def _load_destinations(self) -> None:
         """
@@ -294,68 +285,6 @@ class LoopEngine:
     # Command Handlers
     # ================================================================
 
-    def _handle_compile(self, payload: dict[str, Any]) -> CommandResult:
-        """
-        Load compiled session data with apply timing support.
-
-        If not playing or apply timing is "now", applies immediately.
-        Otherwise queues changes to be applied at the specified timing.
-
-        When track_ids are specified in apply, only those tracks will have
-        events; other tracks will have their events cleared (exclusive apply).
-        """
-        try:
-            # Validate payload with Pydantic
-            cmd = CompileCommand(**payload)
-        except ValidationError as e:
-            return CommandResult.error(f"Invalid compile command: {e}")
-
-        # Extract apply info from payload
-        apply_data = payload.get("apply")
-
-        # Determine timing and track_ids
-        if apply_data:
-            timing = apply_data.get("timing", "bar")
-            track_ids = apply_data.get("track_ids", [])
-        else:
-            # Default: apply all at bar boundary
-            timing = "bar"
-            track_ids = []
-
-        # If not playing or timing is "now", apply immediately
-        if not self.state.playing or timing == "now":
-            logger.info("Loading compiled session (immediate)")
-            # Always load the full session first (environment, tracks, sequences)
-            self.state.load_compiled_session(payload)
-
-            # If specific tracks were specified in apply, clear events for
-            # non-specified tracks (exclusive apply behavior)
-            if track_ids:
-                self.state.clear_non_specified_track_events(track_ids)
-
-            # Convert CompiledSession to ScheduledMessageBatch if destinations are loaded
-            if self._destinations_loaded:
-                compiled_session = self.state.get_effective_session()
-                message_batch = self._session_converter.convert(compiled_session)
-                self._message_scheduler.load_messages(message_batch)
-                logger.info(
-                    f"Converted and loaded session: {len(message_batch.messages)} messages"
-                )
-
-            # Send status update (includes BPM) and track info for Monitor display
-            self._schedule_status_update()
-            self._schedule_tracks_update()
-        else:
-            # Queue for later application
-            logger.info(f"Queuing session change (apply @{timing})")
-            self.state.set_pending_change(
-                session_data=payload,
-                timing=timing,
-                track_ids=track_ids,
-            )
-
-        return CommandResult.ok()
-
     def _handle_session(self, payload: dict[str, Any]) -> CommandResult:
         """
         Load session using new destination-based API (Milestone 3).
@@ -391,8 +320,14 @@ class LoopEngine:
 
         self._message_scheduler.load_messages(batch)
 
-        # Update BPM in state (for compatibility with existing code)
-        self.state.bpm = batch.bpm
+        # Update BPM in state
+        self.state.set_bpm(batch.bpm)
+
+        # Register track_ids from messages for mute/solo filtering
+        for msg in batch.messages:
+            track_id = msg.params.get("track_id")
+            if track_id:
+                self.state.register_track(track_id)
 
         # Send status update
         self._schedule_status_update()
@@ -648,61 +583,9 @@ class LoopEngine:
 
         return CommandResult.ok()
 
-    def _handle_scene(self, payload: dict[str, Any]) -> CommandResult:
-        """
-        Activate a scene by name.
-
-        Payload:
-            name: Scene name to activate
-        """
-        try:
-            # Validate payload with Pydantic
-            cmd = SceneCommand(**payload)
-        except ValidationError as e:
-            return CommandResult.error(f"Invalid scene command: {e}")
-
-        if self.state.activate_scene(cmd.name):
-            logger.info(f"Scene activated: {cmd.name}")
-            self._schedule_status_update()
-            self._schedule_tracks_update()
-            return CommandResult.ok()
-        else:
-            logger.warning(f"Scene not found: {cmd.name}")
-            return CommandResult.error(f"Scene not found: {cmd.name}")
-
-    def _handle_scenes(self, payload: dict[str, Any]) -> CommandResult:
-        """
-        Request scene list update.
-
-        Scene information is delivered via SSE status updates.
-        This handler triggers a status update to broadcast current scenes.
-        """
-        try:
-            # Validate payload with Pydantic
-            cmd = ScenesCommand(**payload)
-        except ValidationError as e:
-            return CommandResult.error(f"Invalid scenes command: {e}")
-
-        # Trigger status update to broadcast scene information via SSE
-        self._schedule_status_update()
-
-        return CommandResult.ok()
-
     # ================================================================
     # Public API Methods
     # ================================================================
-
-    def compile(self, session_data: dict[str, Any]) -> CommandResult:
-        """
-        Public API: Load compiled session data.
-
-        Args:
-            session_data: CompiledSession dictionary with environment, tracks, sequences
-
-        Returns:
-            CommandResult indicating success or failure
-        """
-        return self._handle_compile(session_data)
 
     def play(self) -> CommandResult:
         """
@@ -789,18 +672,6 @@ class LoopEngine:
             CommandResult indicating success or failure
         """
         return self._handle_midi_panic({})
-
-    def activate_scene(self, scene_name: str) -> CommandResult:
-        """
-        Public API: Activate a scene by name.
-
-        Args:
-            scene_name: Name of the scene to activate
-
-        Returns:
-            CommandResult indicating success or failure
-        """
-        return self._handle_scene({"name": scene_name})
 
     async def _check_connections(self) -> None:
         """
@@ -987,21 +858,25 @@ class LoopEngine:
                     scheduled_messages = self._message_scheduler.get_messages_at_step(current_step)
 
                     if scheduled_messages:
-                        logger.debug(
-                            f"Step {current_step}: sending {len(scheduled_messages)} "
-                            "scheduled messages via destination router"
-                        )
+                        # Filter by mute/solo state (NEW)
+                        scheduled_messages = self.state.filter_messages(scheduled_messages)
 
-                        # Apply extension hooks (e.g., cps injection)
-                        # Extensions modify messages just before sending
-                        for hook in self._before_send_hooks:
-                            scheduled_messages = hook(
-                                scheduled_messages,
-                                self.state.bpm,
-                                current_step
+                        if scheduled_messages:  # Only log/send if messages remain after filtering
+                            logger.debug(
+                                f"Step {current_step}: sending {len(scheduled_messages)} "
+                                "scheduled messages via destination router"
                             )
 
-                        self._destination_router.send_messages(scheduled_messages)
+                            # Apply extension hooks (e.g., cps injection)
+                            # Extensions modify messages just before sending
+                            for hook in self._before_send_hooks:
+                                scheduled_messages = hook(
+                                    scheduled_messages,
+                                    self.state.bpm,
+                                    current_step
+                                )
+
+                            self._destination_router.send_messages(scheduled_messages)
 
                 # Publish position on beat boundaries (quarter notes) to reduce traffic
                 if self.state.position.step % 4 == 0:

@@ -10,23 +10,6 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
-class CompileCommand(BaseModel):
-    """
-    Compile command payload.
-
-    Fields:
-        environment: Environment configuration
-        tracks: Track definitions
-        sequences: Sequence data per track
-        apply: Optional apply configuration with timing and track_ids
-    """
-
-    environment: dict[str, Any] = Field(default_factory=dict)
-    tracks: dict[str, Any] = Field(default_factory=dict)
-    sequences: dict[str, Any] = Field(default_factory=dict)
-    apply: dict[str, Any] | None = None
-
-
 class PlayCommand(BaseModel):
     """Play command payload (empty)."""
 
@@ -101,22 +84,5 @@ class MidiPanicCommand(BaseModel):
 
 class PanicCommand(BaseModel):
     """Full panic command payload (empty)."""
-
-    pass
-
-
-class SceneCommand(BaseModel):
-    """
-    Scene activation command payload.
-
-    Fields:
-        name: Scene name to activate
-    """
-
-    name: str
-
-
-class ScenesCommand(BaseModel):
-    """Request scene list command payload (empty)."""
 
     pass
