@@ -125,25 +125,25 @@ curl -X POST http://localhost:57122/playback/stop
 
 ### Getting Started
 
-- **[OIDUNA_CONCEPTS.md](oiduna/docs/OIDUNA_CONCEPTS.md)** - What is Oiduna? Core concepts and terminology
-- **[TERMINOLOGY.md](oiduna/docs/TERMINOLOGY.md)** - Glossary of terms
+- **[OIDUNA_CONCEPTS.md](docs/OIDUNA_CONCEPTS.md)** - What is Oiduna? Core concepts and terminology
+- **[TERMINOLOGY.md](docs/TERMINOLOGY.md)** - Glossary of terms
 
 ### Architecture & Design
 
-- **[ARCHITECTURE.md](oiduna/docs/ARCHITECTURE.md)** - System design, 4-layer IR, data flow, ADRs
-- **[DATA_MODEL_REFERENCE.md](oiduna/docs/DATA_MODEL_REFERENCE.md)** - Complete IR model specification
-- **[PERFORMANCE.md](oiduna/docs/PERFORMANCE.md)** - Performance characteristics and optimization
+- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System design, 3-layer IR, data flow, ADRs
+- **[DATA_MODEL_REFERENCE.md](docs/DATA_MODEL_REFERENCE.md)** - Complete IR model specification
+- **[PERFORMANCE.md](docs/PERFORMANCE.md)** - Performance characteristics and optimization
 
 ### API & Usage
 
-- **[API_REFERENCE.md](oiduna/docs/API_REFERENCE.md)** - All 22 HTTP endpoints with examples
-- **[USAGE_PATTERNS.md](oiduna/docs/USAGE_PATTERNS.md)** - Common use cases and patterns
+- **[API_REFERENCE.md](docs/API_REFERENCE.md)** - All 22 HTTP endpoints with examples
+- **[USAGE_PATTERNS.md](docs/USAGE_PATTERNS.md)** - Common use cases and patterns
 - **[Interactive Docs](http://localhost:57122/docs)** - Swagger UI (when server running)
 
 ### Development
 
-- **[DEVELOPMENT_GUIDE.md](oiduna/docs/DEVELOPMENT_GUIDE.md)** - Setup, testing, contribution guide
-- **[DISTRIBUTION_GUIDE.md](oiduna/docs/DISTRIBUTION_GUIDE.md)** - Building custom Distributions (DSLs)
+- **DEVELOPMENT_GUIDE.md** - Setup, testing, contribution guide (準備中)
+- **[DISTRIBUTION_GUIDE.md](docs/DISTRIBUTION_GUIDE.md)** - Building custom Distributions (DSLs)
 
 
 ---
@@ -172,7 +172,7 @@ curl -X POST http://localhost:57122/playback/stop
   (audio)          (hardware)
 ```
 
-### 4-Layer IR Model
+### 3-Layer IR Model
 
 Oiduna uses a layered Intermediate Representation:
 
@@ -181,7 +181,7 @@ Oiduna uses a layered Intermediate Representation:
 3. **🎵 Pattern Layer** - Time-based events (when to play what)
 4. **🎮 Control Layer** - Scenes, timing control
 
-See [ARCHITECTURE.md](oiduna/docs/ARCHITECTURE.md) for details.
+See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for details.
 
 ---
 
@@ -206,7 +206,7 @@ See [ARCHITECTURE.md](oiduna/docs/ARCHITECTURE.md) for details.
 | `/midi/ports` | GET | List MIDI ports |
 | `/stream` | GET (SSE) | Real-time event stream |
 
-See [API_REFERENCE.md](oiduna/docs/API_REFERENCE.md) for complete documentation.
+See [API_REFERENCE.md](docs/API_REFERENCE.md) for complete documentation.
 
 ---
 
@@ -351,7 +351,7 @@ MIT
 
 ## Contributing
 
-See [DEVELOPMENT_GUIDE.md](oiduna/docs/DEVELOPMENT_GUIDE.md) for:
+Development guide (準備中) will cover:
 - Development environment setup
 - Code contribution guidelines
 - Testing procedures
@@ -363,13 +363,13 @@ See [DEVELOPMENT_GUIDE.md](oiduna/docs/DEVELOPMENT_GUIDE.md) for:
 
 **Oiduna Core**: v1.0
 **API Version**: v1.0
-**Last Updated**: 2026-02-24
+**Last Updated**: 2026-02-26
 
 ---
 
 ## Links
 
-- **Documentation**: [/docs](oiduna/docs/)
+- **Documentation**: [/docs](docs/)
 - **API Docs (Swagger)**: http://localhost:57122/docs
 - **API Docs (ReDoc)**: http://localhost:57122/redoc
 - **GitHub Issues**: (Add your repo URL here)
