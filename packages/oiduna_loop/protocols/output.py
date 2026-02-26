@@ -5,25 +5,17 @@ Extended interfaces for MIDI and OSC output, building on the framework
 protocols defined in mars_common.protocols.
 
 Relationship to mars_common protocols:
-- OscOutput extends OscOutputProtocol with send_osc_event()
+- OscOutput extends OscOutputProtocol with connection management
 - MidiOutput extends MidiOutputProtocol with clock/transport methods
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
-
-if TYPE_CHECKING:
-    from oiduna_core.output.output import OscEvent
-
-# Re-export framework protocols for convenience
-from oiduna_core.protocols import MidiOutputProtocol, OscOutputProtocol
+from typing import Protocol, runtime_checkable
 
 __all__ = [
     "MidiOutput",
     "OscOutput",
-    "MidiOutputProtocol",
-    "OscOutputProtocol",
 ]
 
 
@@ -121,18 +113,6 @@ class OscOutput(Protocol):
 
     def disconnect(self) -> None:
         """Close OSC connection."""
-        ...
-
-    def send_osc_event(self, event: OscEvent) -> bool:
-        """
-        Send a pre-computed OscEvent to SuperDirt.
-
-        Args:
-            event: Pre-computed OscEvent from StepProcessor.process_step_v2()
-
-        Returns:
-            True if sent successfully
-        """
         ...
 
     @property

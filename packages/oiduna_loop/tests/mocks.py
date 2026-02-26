@@ -10,10 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from oiduna_core.models.output import OscEvent
+from typing import Any
 
 
 @dataclass
@@ -113,10 +110,9 @@ class MockOscOutput:
     """
     Test double for OscOutput protocol.
 
-    Records all OSC events for test assertions.
+    Simple mock for OSC connection management.
     """
 
-    osc_events: list = field(default_factory=list)  # list[OscEvent]
     _connected: bool = True
 
     def connect(self) -> None:
@@ -125,23 +121,9 @@ class MockOscOutput:
     def disconnect(self) -> None:
         self._connected = False
 
-    def send_osc_event(self, event: OscEvent) -> bool:
-        """Records OscEvent directly."""
-        self.osc_events.append(event)
-        return True
-
     @property
     def is_connected(self) -> bool:
         return self._connected
-
-    @property
-    def events(self) -> list:
-        """Alias for osc_events (backward compatibility)."""
-        return self.osc_events
-
-    def reset(self) -> None:
-        """Reset all recorded state for next test."""
-        self.osc_events.clear()
 
 
 @dataclass

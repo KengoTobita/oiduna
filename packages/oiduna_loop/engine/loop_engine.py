@@ -9,7 +9,7 @@ Main loop engine that orchestrates:
 - In-process IPC with oiduna_api
 
 Refactored using Martin Fowler patterns:
-- Extract Class: StepProcessor, NoteScheduler, ClockGenerator
+- Extract Class: NoteScheduler, ClockGenerator
 - Single Responsibility Principle
 - Dependency Injection: Protocol-based DI for testability
 """
@@ -43,7 +43,6 @@ from ..result import CommandResult
 from ..state import PlaybackState, RuntimeState
 from .clock_generator import ClockGenerator
 from .note_scheduler import NoteScheduler
-from .step_processor import StepProcessor
 
 # New destination-based architecture imports
 from pathlib import Path
@@ -127,7 +126,6 @@ class LoopEngine:
         self._publisher = publisher
 
         # Processors (Martin Fowler: Extract Class)
-        self._step_processor = StepProcessor(self._osc)
         self._note_scheduler = NoteScheduler(self._midi)
         self._clock_generator = ClockGenerator(self._midi)
 
@@ -884,7 +882,7 @@ class LoopEngine:
         """
         16th note step loop with drift correction and auto-reset.
 
-        Delegates event processing to StepProcessor.
+        Uses ScheduledMessage architecture for event routing.
         Applies pending changes at appropriate timing boundaries.
 
         Drift correction (Phase 1):
@@ -993,44 +991,6 @@ class LoopEngine:
                             )
 
                         self._destination_router.send_messages(scheduled_messages)
-
-                # === Legacy StepProcessor (keep for compatibility) ===
-                # Process current step (delegated to StepProcessor)
-                # Uses Output IR (Layer 3) for OSC/MIDI events
-                step_output = self._step_processor.process_step_v2(self.state)
-
-                # Send OSC events to SuperDirt
-                for osc_event in step_output.osc_events:
-                    self._osc.send_osc_event(osc_event)
-
-                # Schedule MIDI notes
-                for midi_note in step_output.midi_notes:
-                    if self._midi_enabled:
-                        # Convert duration_ms back to gate for NoteScheduler
-                        # gate = duration_ms / 1000 / step_duration
-                        gate = midi_note.duration_ms / 1000.0 / step_duration
-                        self._note_scheduler.schedule_note_on_channel(
-                            midi_note.channel,
-                            midi_note.note,
-                            midi_note.velocity,
-                            step_duration,
-                            gate,
-                        )
-
-                # Send MIDI CC events
-                for midi_cc in step_output.midi_ccs:
-                    if self._midi_enabled and self._midi.is_connected:
-                        self._midi.send_cc(midi_cc.channel, midi_cc.cc, midi_cc.value)
-
-                # Send MIDI Pitch Bend events
-                for pitch_bend in step_output.midi_pitch_bends:
-                    if self._midi_enabled and self._midi.is_connected:
-                        self._midi.send_pitch_bend(pitch_bend.channel, pitch_bend.value)
-
-                # Send MIDI Aftertouch events
-                for aftertouch in step_output.midi_aftertouches:
-                    if self._midi_enabled and self._midi.is_connected:
-                        self._midi.send_aftertouch(aftertouch.channel, aftertouch.value)
 
                 # Publish position on beat boundaries (quarter notes) to reduce traffic
                 if self.state.position.step % 4 == 0:
