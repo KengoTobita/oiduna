@@ -6,6 +6,7 @@ from collections import defaultdict
 
 from scheduler_models import ScheduledMessage
 from router import DestinationRouter
+from validators import OscValidator, MidiValidator
 
 
 class MockDestinationSender:
@@ -135,3 +136,115 @@ class TestDestinationRouter:
         assert "osc1" in dests
         assert "midi1" in dests
         assert "osc2" in dests
+
+    def test_register_with_protocol(self):
+        """Test registering destinations with protocol specification."""
+        router = DestinationRouter()
+        osc_sender = MockDestinationSender()
+        midi_sender = MockDestinationSender()
+
+        router.register_destination("superdirt", osc_sender, protocol="osc")
+        router.register_destination("volca", midi_sender, protocol="midi")
+
+        assert "superdirt" in router.get_registered_destinations()
+        assert "volca" in router.get_registered_destinations()
+
+    def test_validate_osc_message_valid(self):
+        """Test that valid OSC messages are sent."""
+        router = DestinationRouter()
+        sender = MockDestinationSender()
+        router.register_destination("superdirt", sender, protocol="osc")
+
+        msg = ScheduledMessage("superdirt", 1.0, 0, {
+            "s": "bd",
+            "gain": 0.8,
+            "pan": 0.5,
+        })
+        router.send_messages([msg])
+
+        assert len(sender.messages) == 1
+        assert sender.messages[0] == {"s": "bd", "gain": 0.8, "pan": 0.5}
+
+    def test_validate_osc_message_invalid(self, caplog):
+        """Test that invalid OSC messages are rejected and logged."""
+        router = DestinationRouter()
+        sender = MockDestinationSender()
+        router.register_destination("superdirt", sender, protocol="osc")
+
+        # Invalid OSC message: list params not supported
+        msg = ScheduledMessage("superdirt", 1.0, 0, {
+            "s": "bd",
+            "notes": [60, 64, 67],  # Invalid: list
+        })
+
+        router.send_messages([msg])
+
+        # Message should be rejected
+        assert len(sender.messages) == 0
+        # Should log warning
+        assert "Invalid OSC message" in caplog.text
+
+    def test_validate_midi_message_valid(self):
+        """Test that valid MIDI messages are sent."""
+        router = DestinationRouter()
+        sender = MockDestinationSender()
+        router.register_destination("volca", sender, protocol="midi")
+
+        msg = ScheduledMessage("volca", 1.0, 0, {
+            "channel": 0,
+            "note": 60,
+            "velocity": 100,
+        })
+        router.send_messages([msg])
+
+        assert len(sender.messages) == 1
+        assert sender.messages[0] == {"channel": 0, "note": 60, "velocity": 100}
+
+    def test_validate_midi_message_invalid(self, caplog):
+        """Test that invalid MIDI messages are rejected and logged."""
+        router = DestinationRouter()
+        sender = MockDestinationSender()
+        router.register_destination("volca", sender, protocol="midi")
+
+        # Invalid MIDI message: note out of range
+        msg = ScheduledMessage("volca", 1.0, 0, {
+            "note": 200,  # Invalid: > 127
+            "velocity": 100,
+        })
+
+        router.send_messages([msg])
+
+        # Message should be rejected
+        assert len(sender.messages) == 0
+        # Should log warning
+        assert "Invalid MIDI message" in caplog.text
+
+    def test_validate_mixed_valid_and_invalid(self, caplog):
+        """Test that valid messages are sent while invalid ones are rejected."""
+        router = DestinationRouter()
+        sender = MockDestinationSender()
+        router.register_destination("superdirt", sender, protocol="osc")
+
+        msg1 = ScheduledMessage("superdirt", 1.0, 0, {"s": "bd", "gain": 0.8})  # Valid
+        msg2 = ScheduledMessage("superdirt", 1.0, 1, {"s": "sn", "notes": [1, 2]})  # Invalid
+        msg3 = ScheduledMessage("superdirt", 1.0, 2, {"s": "hh", "pan": 0.5})  # Valid
+
+        router.send_messages([msg1, msg2, msg3])
+
+        # Only valid messages should be sent
+        assert len(sender.messages) == 2
+        assert sender.messages[0] == {"s": "bd", "gain": 0.8}
+        assert sender.messages[1] == {"s": "hh", "pan": 0.5}
+
+    def test_custom_validators(self):
+        """Test router with custom validators."""
+        custom_osc = OscValidator()
+        custom_midi = MidiValidator()
+        router = DestinationRouter(osc_validator=custom_osc, midi_validator=custom_midi)
+        sender = MockDestinationSender()
+        router.register_destination("superdirt", sender, protocol="osc")
+
+        msg = ScheduledMessage("superdirt", 1.0, 0, {"s": "bd"})
+        router.send_messages([msg])
+
+        assert len(sender.messages) == 1

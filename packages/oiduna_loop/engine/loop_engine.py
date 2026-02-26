@@ -43,6 +43,7 @@ from ..result import CommandResult
 from ..state import PlaybackState, RuntimeState
 from .clock_generator import ClockGenerator
 from .note_scheduler import NoteScheduler
+from ..converters import SessionToMessagesConverter
 
 # New destination-based architecture imports
 from pathlib import Path
@@ -159,6 +160,7 @@ class LoopEngine:
         self._message_scheduler = MessageScheduler()
         self._destination_router = DestinationRouter()
         self._destinations_loaded = False
+        self._session_converter = SessionToMessagesConverter()
 
         # Extension hooks (API layer integration)
         self._before_send_hooks = before_send_hooks or []
@@ -330,6 +332,15 @@ class LoopEngine:
             # non-specified tracks (exclusive apply behavior)
             if track_ids:
                 self.state.clear_non_specified_track_events(track_ids)
+
+            # Convert CompiledSession to ScheduledMessageBatch if destinations are loaded
+            if self._destinations_loaded:
+                compiled_session = self.state.get_effective_session()
+                message_batch = self._session_converter.convert(compiled_session)
+                self._message_scheduler.load_messages(message_batch)
+                logger.info(
+                    f"Converted and loaded session: {len(message_batch.messages)} messages"
+                )
 
             # Send status update (includes BPM) and track info for Monitor display
             self._schedule_status_update()
