@@ -14,7 +14,7 @@ from fastapi.templating import Jinja2Templates
 
 from oiduna_api.config import settings
 from oiduna_api.extensions import discover_extensions
-from oiduna_api.routes import assets, dashboard, midi, patterns, playback, scene, stream, tracks
+from oiduna_api.routes import assets, dashboard, midi, patterns, playback, stream, tracks
 from oiduna_api.services.loop_service import LoopService, get_loop_service, lifespan
 
 logger = logging.getLogger(__name__)
@@ -93,7 +93,6 @@ app.include_router(patterns.router, prefix="/patterns", tags=["patterns"])
 app.include_router(playback.router, prefix="/playback", tags=["playback"])
 app.include_router(stream.router, tags=["stream"])
 app.include_router(tracks.router, prefix="/tracks", tags=["tracks"])
-app.include_router(scene.router, prefix="/scene", tags=["scene"])
 app.include_router(midi.router, prefix="/midi", tags=["midi"])
 app.include_router(assets.router, prefix="/assets", tags=["assets"])
 

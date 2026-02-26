@@ -52,28 +52,9 @@ class StatusResponse(BaseModel):
     bpm: float
     position: dict
     active_tracks: list[str]
-    has_pending: bool
-    scenes: list[str]
-    current_scene: str | None
-
-
-@router.post("/pattern")
-async def load_pattern(
-    body: dict,
-    loop_service: LoopService = Depends(get_loop_service),
-) -> dict:
-    """Load a compiled session pattern.
-
-    The request body is a CompiledSession dict.
-    Does not auto-play — call /playback/start to begin.
-    """
-    engine = loop_service.get_engine()
-    result = engine._handle_compile(body)
-
-    if not result.success:
-        raise HTTPException(status_code=500, detail=result.message)
-
-    return {"status": "ok"}
+    known_tracks: list[str]
+    muted_tracks: list[str]
+    soloed_tracks: list[str]
 
 
 @router.post("/start")
