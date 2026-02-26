@@ -24,8 +24,8 @@ from typing import Any
 
 import pytest
 
-from ..engine import LoopEngine
-from .mocks import MockCommandSource, MockMidiOutput, MockOscOutput, MockStateSink
+from oiduna_loop.engine import LoopEngine
+from oiduna_loop.tests.mocks import MockCommandSource, MockMidiOutput, MockOscOutput, MockStateSink
 
 # Skip stability tests unless explicitly enabled
 STABILITY_TESTS_ENABLED = os.environ.get("RUN_STABILITY_TESTS", "0") == "1"

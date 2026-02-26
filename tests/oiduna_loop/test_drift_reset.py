@@ -11,10 +11,10 @@ import time
 
 import pytest
 
-from ..engine import LoopEngine
-from ..engine.clock_generator import ClockGenerator
-from ..state import PlaybackState
-from .mocks import MockMidiOutput, MockStateSink
+from oiduna_loop.engine import LoopEngine
+from oiduna_loop.engine.clock_generator import ClockGenerator
+from oiduna_loop.state import PlaybackState
+from oiduna_loop.tests.mocks import MockMidiOutput, MockStateSink
 
 
 class TestDriftResetConstants:

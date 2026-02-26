@@ -5,10 +5,7 @@ from pathlib import Path
 
 # Add packages to sys.path
 root_dir = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(root_dir / "packages" / "oiduna_api"))
-sys.path.insert(0, str(root_dir / "packages" / "oiduna_loop"))
-sys.path.insert(0, str(root_dir / "packages" / "oiduna_core"))
-sys.path.insert(0, str(root_dir / "packages" / "osc_protocol"))
+sys.path.insert(0, str(root_dir / "packages"))
 
 import asyncio
 import pytest
@@ -32,6 +29,7 @@ def mock_loop_service():
     position.beat = 0
     position.bar = 0
     engine.state.position = position
+    engine.state.bpm = 120
 
     engine.state.to_status_dict.return_value = {
         "playing": False,
@@ -43,6 +41,23 @@ def mock_loop_service():
         "scenes": [],
         "current_scene": None,
     }
+
+    # Mock OSC output
+    mock_osc = Mock()
+    mock_osc.is_connected = True
+    mock_osc._host = "127.0.0.1"
+    mock_osc._port = 57120
+    engine._osc = mock_osc
+
+    # Mock MIDI output
+    mock_midi = Mock()
+    mock_midi.is_connected = False
+    mock_midi.port_name = None
+    mock_midi.list_ports.return_value = []
+    engine._midi = mock_midi
+
+    # Mock engine running state
+    engine._running = True
 
     # Mock get_effective for tracks
     effective = Mock()
@@ -114,12 +129,22 @@ def mock_loop_service():
 @pytest.fixture
 def client(mock_loop_service, monkeypatch):
     """Create a test client with mocked LoopService"""
-    from services import loop_service
+    from oiduna_api.services import loop_service
+    from oiduna_api.extensions import ExtensionPipeline
 
     # Replace global _loop_service with mock
     monkeypatch.setattr(loop_service, "_loop_service", mock_loop_service)
 
-    return TestClient(app)
+    # Create test client and set up app.state (since lifespan doesn't run)
+    test_client = TestClient(app)
+
+    # Mock extension pipeline (required by session API)
+    mock_pipeline = Mock(spec=ExtensionPipeline)
+    mock_pipeline.extensions = []
+    mock_pipeline.get_send_hooks.return_value = []
+    app.state.extension_pipeline = mock_pipeline
+
+    return test_client
 
 
 @pytest.fixture

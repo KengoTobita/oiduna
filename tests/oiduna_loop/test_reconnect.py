@@ -8,10 +8,10 @@ from __future__ import annotations
 
 import pytest
 
-from ..engine import LoopEngine
-from ..output.midi_sender import MidiSender
-from ..state import PlaybackState
-from .mocks import MockCommandSource, MockMidiOutput
+from oiduna_loop.engine import LoopEngine
+from oiduna_loop.output.midi_sender import MidiSender
+from oiduna_loop.state import PlaybackState
+from oiduna_loop.tests.mocks import MockCommandSource, MockMidiOutput
 
 
 class TestMidiSenderRetry:

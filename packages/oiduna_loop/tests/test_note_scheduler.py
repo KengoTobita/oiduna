@@ -9,7 +9,7 @@ from __future__ import annotations
 import time
 
 import pytest
-from oiduna_core.models.track_midi import TrackMidi
+from oiduna_core.ir.track_midi import TrackMidi
 
 from ..engine.note_scheduler import NoteScheduler
 from .mocks import MockMidiOutput

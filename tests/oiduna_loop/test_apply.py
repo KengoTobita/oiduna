@@ -15,7 +15,7 @@ from oiduna_core.ir.sequence import Event, EventSequence
 from oiduna_core.ir.session import CompiledSession
 from oiduna_core.ir.track import FxParams, Track, TrackMeta, TrackParams
 
-from ..state import PendingApply, PlaybackState, RuntimeState
+from oiduna_loop.state import PendingApply, PlaybackState, RuntimeState
 
 
 class TestPendingApply:

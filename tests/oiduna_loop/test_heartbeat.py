@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import pytest
 
-from ..engine import LoopEngine
-from .mocks import MockStateSink
+from oiduna_loop.engine import LoopEngine
+from oiduna_loop.tests.mocks import MockStateSink
 
 
 class TestHeartbeatLoop:

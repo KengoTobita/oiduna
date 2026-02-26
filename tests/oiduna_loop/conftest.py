@@ -12,10 +12,7 @@ from typing import Any
 
 # Add packages to sys.path
 root_dir = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(root_dir / "packages" / "oiduna_api"))
-sys.path.insert(0, str(root_dir / "packages" / "oiduna_loop"))
-sys.path.insert(0, str(root_dir / "packages" / "oiduna_core"))
-sys.path.insert(0, str(root_dir / "packages" / "osc_protocol"))
+sys.path.insert(0, str(root_dir / "packages"))
 
 import pytest
 from oiduna_core.ir.environment import Environment

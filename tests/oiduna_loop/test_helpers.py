@@ -9,13 +9,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from oiduna_core.models.environment import Environment
-from oiduna_core.models.sequence import Event, EventSequence
-from oiduna_core.models.session import CompiledSession
-from oiduna_core.models.track import FxParams, Track, TrackMeta, TrackParams
-from oiduna_core.models.track_midi import TrackMidi
+from oiduna_core.ir.environment import Environment
+from oiduna_core.ir.sequence import Event, EventSequence
+from oiduna_core.ir.session import CompiledSession
+from oiduna_core.ir.track import FxParams, Track, TrackMeta, TrackParams
+from oiduna_core.ir.track_midi import TrackMidi
 
-from ..state import RuntimeState
+from oiduna_loop.state import RuntimeState
 
 
 def create_test_runtime_state(

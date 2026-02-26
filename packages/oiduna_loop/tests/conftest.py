@@ -8,11 +8,18 @@ from __future__ import annotations
 
 from typing import Any
 
+import sys
+from pathlib import Path
+
+# Add packages to sys.path
+root_dir = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(root_dir / "packages"))
+
 import pytest
-from oiduna_core.models.environment import Environment
-from oiduna_core.models.sequence import Event, EventSequence
-from oiduna_core.models.session import CompiledSession
-from oiduna_core.models.track import FxParams, Track, TrackMeta, TrackParams
+from oiduna_core.ir.environment import Environment
+from oiduna_core.ir.sequence import Event, EventSequence
+from oiduna_core.ir.session import CompiledSession
+from oiduna_core.ir.track import FxParams, Track, TrackMeta, TrackParams
 
 from ..engine import LoopEngine
 from .mocks import MockCommandSource, MockMidiOutput, MockOscOutput, MockStateSink

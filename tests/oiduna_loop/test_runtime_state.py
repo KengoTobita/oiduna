@@ -1,9 +1,9 @@
 """Tests for RuntimeState."""
 
 
-from oiduna_core.models.environment import Environment
-from oiduna_core.models.session import CompiledSession
-from oiduna_core.models.track import Track, TrackMeta, TrackParams
+from oiduna_core.ir.environment import Environment
+from oiduna_core.ir.session import CompiledSession
+from oiduna_core.ir.track import Track, TrackMeta, TrackParams
 from oiduna_loop.state.runtime_state import (
     PlaybackState,
     Position,
@@ -224,7 +224,7 @@ class TestRuntimeStateScene:
 
     def test_apply_scene(self) -> None:
         """Test activating a scene."""
-        from oiduna_core.models.scene import Scene
+        from oiduna_core.ir.scene import Scene
 
         state = RuntimeState()
 
@@ -260,7 +260,7 @@ class TestRuntimeStateScene:
 
     def test_apply_scene_clears_overrides(self) -> None:
         """Test that scene activation clears live_overrides."""
-        from oiduna_core.models.scene import Scene
+        from oiduna_core.ir.scene import Scene
 
         state = RuntimeState()
 

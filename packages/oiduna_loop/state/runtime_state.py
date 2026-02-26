@@ -235,7 +235,6 @@ class RuntimeState:
             speed=override.params.speed if override.params.speed != 1.0 else base.params.speed,
             begin=override.params.begin if override.params.begin != 0.0 else base.params.begin,
             end=override.params.end if override.params.end != 1.0 else base.params.end,
-            orbit=override.params.orbit if override.params.orbit != 0 else base.params.orbit,
             cut=override.params.cut if override.params.cut is not None else base.params.cut,
             legato=(
                 override.params.legato

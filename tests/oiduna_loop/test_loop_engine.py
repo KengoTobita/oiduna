@@ -11,8 +11,8 @@ from typing import Any
 
 import pytest
 
-from ..engine import LoopEngine
-from ..state import PlaybackState
+from oiduna_loop.engine import LoopEngine
+from oiduna_loop.state import PlaybackState
 
 
 class TestLoopEngineInit:
