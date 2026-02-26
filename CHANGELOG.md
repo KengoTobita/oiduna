@@ -4,6 +4,108 @@ All notable changes to oiduna will be documented in this file.
 
 ## [Unreleased]
 
+### BREAKING CHANGE - Architecture Unification (2026-02-26)
+
+**Complete transition to ScheduledMessageBatch architecture** - CompiledSession and related infrastructure have been completely removed. Oiduna now exclusively uses ScheduledMessageBatch for all pattern data.
+
+**What Changed**:
+
+1. **Removed CompiledSession Infrastructure**
+   - Deleted all IR models: `CompiledSession`, `Track`, `EventSequence`, `Environment`, `Scene`, `MixerLine`, etc.
+   - Deleted `SessionToMessagesConverter` (converters/ directory removed)
+   - Deleted all CompiledSession-related tests
+
+2. **Simplified RuntimeState** (624 lines → ~280 lines)
+   - Removed: CompiledSession management, deep merge logic, Scene/Apply functionality
+   - Kept: Playback state, BPM management, mute/solo filtering
+   - **New**: Track-based mute/solo filtering using `track_id` from params
+   - **New**: `filter_messages()` method for filtering ScheduledMessage lists
+   - **New**: `register_track()` for tracking known track_ids
+
+3. **Removed API Endpoints**
+   - `POST /playback/pattern` - CompiledSession endpoint removed
+   - `POST /scene/activate` - Scene endpoints removed
+   - `GET /scenes` - Scene endpoints removed
+
+4. **Simplified LoopEngine**
+   - Deleted `_handle_compile()`, `_handle_scene()`, `_handle_scenes()` methods
+   - Removed `compile()` and `activate_scene()` public API methods
+   - **Only `POST /playback/session` endpoint remains** for loading patterns
+   - Added mute/solo filtering in `_step_loop()` before sending messages
+
+**Migration Guide**:
+
+**Old API (CompiledSession - REMOVED)**:
+```python
+# This no longer works
+compiled_session = {
+    "environment": {"bpm": 120, ...},
+    "tracks": {"kick": {...}, ...},
+    "sequences": {"kick": {...}, ...},
+    "scenes": {...},
+    "apply": {"timing": "bar", "track_ids": ["kick"]}
+}
+POST /playback/pattern
+```
+
+**New API (ScheduledMessageBatch - ONLY option)**:
+```python
+# Use this instead
+message_batch = {
+    "messages": [
+        {
+            "destination_id": "superdirt",
+            "cycle": 0.0,
+            "step": 0,
+            "params": {
+                "track_id": "kick",  # REQUIRED for mute/solo
+                "s": "bd",
+                "gain": 0.8,
+                "pan": 0.5
+            }
+        },
+        # ...
+    ],
+    "bpm": 120.0,
+    "pattern_length": 4.0
+}
+POST /playback/session
+```
+
+**Important**:
+- `track_id` in `params` is **required** for mute/solo filtering to work
+- Messages without `track_id` will always be sent (not filtered)
+- MARS/Distribution must now generate ScheduledMessageBatch format
+- Scene expansion and apply timing are now **client-side responsibility**
+
+**Mute/Solo Changes**:
+- Mute/Solo endpoints still exist: `POST /tracks/{id}/mute`, `POST /tracks/{id}/solo`
+- Filtering now happens at message send time based on `params["track_id"]`
+- Solo takes priority: if any tracks are soloed, only those play
+- Unknown track_ids are inactive by default
+
+**Status Response Changes**:
+```python
+# Old fields (removed)
+"has_pending", "scenes", "current_scene"
+
+# New fields
+"known_tracks", "muted_tracks", "soloed_tracks"
+```
+
+**Why This Change**:
+- Dramatic code simplification: removed 20+ files, 500+ lines
+- Clear responsibility boundaries: Distribution = pattern generation, Oiduna = scheduling + routing
+- Better performance: no deep merging, no session caching
+- Unified architecture: one data format throughout
+
+**Impact**:
+- **MARS_for_oiduna compiler must be updated** to output ScheduledMessageBatch
+- All existing compiled sessions are incompatible
+- Tests using CompiledSession fixtures must be rewritten
+
+---
+
 ### Changed - Architecture Refinement (2026-02-26)
 
 **Dual Architecture with Clear Responsibility Boundaries** - Refined Oiduna's architecture to clarify the separation between CompiledSession (state management) and ScheduledMessageBatch (sound output).
