@@ -19,15 +19,21 @@ logger = logging.getLogger(__name__)
 
 
 class OscSender:
-    """SuperDirt OSC message sender"""
+    """Generic OSC message sender (works with any OSC destination)"""
 
     DEFAULT_HOST = "127.0.0.1"
     DEFAULT_PORT = 57120  # SuperDirt default port
-    ADDRESS = "/dirt/play"
+    DEFAULT_ADDRESS = "/dirt/play"  # SuperDirt default address
 
-    def __init__(self, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT):
+    def __init__(
+        self,
+        host: str = DEFAULT_HOST,
+        port: int = DEFAULT_PORT,
+        address: str = DEFAULT_ADDRESS,
+    ):
         self._host = host
         self._port = port
+        self._address = address
         self._client: udp_client.SimpleUDPClient | None = None
 
     def connect(self) -> None:
@@ -42,7 +48,7 @@ class OscSender:
 
     def send(self, params: dict[str, Any]) -> bool:
         """
-        Send an OSC message to SuperDirt
+        Send an OSC message to configured address
 
         Args:
             params: Dictionary of OSC parameters
@@ -61,7 +67,7 @@ class OscSender:
                 args.append(key)
                 args.append(value)
 
-            self._client.send_message(self.ADDRESS, args)
+            self._client.send_message(self._address, args)
             return True
 
         except Exception as e:
@@ -70,7 +76,7 @@ class OscSender:
 
     def send_osc_event(self, event: OscEvent) -> bool:
         """
-        Send a pre-computed OscEvent to SuperDirt.
+        Send a pre-computed OscEvent to configured address.
 
         This is the new Output IR (Layer 3) interface. The event contains
         all pre-computed values (gain with velocity/modulation applied,
@@ -92,15 +98,41 @@ class OscSender:
             return False
 
         try:
-            self._client.send_message(self.ADDRESS, event.to_osc_args())
+            self._client.send_message(self._address, event.to_osc_args())
             return True
         except Exception as e:
             logger.error(f"OSC send error: {e}")
             return False
 
+    def send_any(self, params: dict[str, Any]) -> bool:
+        """
+        Send arbitrary OSC parameters to configured address.
+
+        Generic method for sending any OSC message. Use this for
+        destination-agnostic operations.
+
+        Args:
+            params: Dictionary of OSC parameters
+
+        Returns:
+            True if sent successfully
+        """
+        return self.send(params)
+
     def send_silence(self, orbit: int = 0) -> bool:
-        """Send silence command to an orbit"""
-        return self.send({"s": "~", "orbit": orbit})
+        """
+        Send silence command (SuperDirt-specific).
+
+        DEPRECATED: Use send_any({"s": "~", "orbit": orbit}) instead.
+        This method is kept for backward compatibility.
+
+        Args:
+            orbit: Orbit number to silence
+
+        Returns:
+            True if sent successfully
+        """
+        return self.send_any({"s": "~", "orbit": orbit})
 
     @property
     def is_connected(self) -> bool:

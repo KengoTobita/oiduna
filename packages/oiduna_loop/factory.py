@@ -19,6 +19,7 @@ from .output import MidiSender, OscSender
 def create_loop_engine(
     osc_host: str = "127.0.0.1",
     osc_port: int = 57120,
+    osc_address: str = "/dirt/play",
     midi_port: str | None = None,
     command_source: CommandSource | None = None,
     state_sink: StateSink | None = None,
@@ -28,8 +29,9 @@ def create_loop_engine(
     Create a production LoopEngine with real I/O dependencies.
 
     Args:
-        osc_host: SuperDirt OSC host
-        osc_port: SuperDirt OSC port
+        osc_host: OSC destination host
+        osc_port: OSC destination port
+        osc_address: OSC message address (default: "/dirt/play" for SuperDirt)
         midi_port: MIDI output port name (None for first available)
         command_source: CommandSource implementation (default: NoopCommandSource)
         state_sink: StateSink implementation (default: InProcessStateSink)
@@ -38,7 +40,7 @@ def create_loop_engine(
     Returns:
         Configured LoopEngine instance
     """
-    osc = OscSender(osc_host, osc_port)
+    osc = OscSender(osc_host, osc_port, osc_address)
     midi = MidiSender(midi_port)
     commands = cast(
         CommandSource,

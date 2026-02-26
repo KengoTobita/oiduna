@@ -15,7 +15,7 @@ See: docs/plans/THREE_LAYER_IR_ARCHITECTURE.md
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 # ===========================================================================
@@ -48,10 +48,11 @@ class OscEvent:
 
     # === Required: Core Sound ===
     sound: str  # "s" - sound name (e.g., "super808", "bd", "piano")
-    orbit: int  # track routing (0-11)
+
+    # === Generic params dict (orbit, cps, etc.) ===
+    params: dict[str, Any] = field(default_factory=dict)
 
     # === Required: Timing ===
-    cps: float  # cycles per second (derived from BPM)
     cycle: float  # current cycle position
 
     # === Required: Basic Params ===
@@ -175,14 +176,15 @@ class OscEvent:
             List in [key, value, key, value, ...] format
             ready for pythonosc send_message()
         """
+        # Start with sound
+        args: list[Any] = ["s", self.sound]
+
+        # Add params from dict (generic params including orbit, cps)
+        for key, value in self.params.items():
+            args.extend([key, value])
+
         # Required params (always included)
-        args: list[Any] = [
-            "s",
-            self.sound,
-            "orbit",
-            self.orbit,
-            "cps",
-            self.cps,
+        args.extend([
             "cycle",
             self.cycle,
             "gain",
@@ -197,7 +199,7 @@ class OscEvent:
             self.begin,
             "end",
             self.end,
-        ]
+        ])
 
         # Optional params (only include if set)
         optionals: list[tuple[str, Any]] = [
@@ -299,8 +301,7 @@ class OscEvent:
         """Convert to dictionary (for debugging/logging)."""
         result: dict[str, Any] = {
             "sound": self.sound,
-            "orbit": self.orbit,
-            "cps": self.cps,
+            "params": self.params.copy(),
             "cycle": self.cycle,
             "gain": self.gain,
             "pan": self.pan,

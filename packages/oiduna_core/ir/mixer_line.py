@@ -157,20 +157,3 @@ class MixerLine:
             dynamics=MixerLineDynamics.from_dict(data.get("dynamics", {})),
             fx=MixerLineFx.from_dict(data.get("fx", {})),
         )
-
-    def get_orbit(self, mixer_lines: dict[str, MixerLine]) -> int:
-        """Calculate SuperDirt orbit based on MixerLine order.
-
-        The orbit is determined by the position of this MixerLine
-        in the mixer_lines dictionary (definition order).
-
-        Args:
-            mixer_lines: Dictionary of all MixerLines
-
-        Returns:
-            Orbit number (0-based index)
-        """
-        for i, name in enumerate(mixer_lines.keys()):
-            if name == self.name:
-                return i
-        return 0

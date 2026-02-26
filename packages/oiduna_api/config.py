@@ -54,6 +54,9 @@ class Settings(BaseSettings):
     # SuperDirt integration
     superdirt_auto_reload: bool = True
 
+    # Destination configuration (new destination-based architecture)
+    destination_config_path: str = "destinations.yaml"
+
 
 # Global settings instance
 settings = Settings()

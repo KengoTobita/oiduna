@@ -30,7 +30,6 @@ class TrackParams:
     speed: float = 1.0
     begin: float = 0.0
     end: float = 1.0
-    orbit: int = 0
     # Voice control
     cut: int | None = None  # Cut group
     legato: float | None = None  # Note length multiplier
@@ -48,7 +47,6 @@ class TrackParams:
             "speed": self.speed,
             "begin": self.begin,
             "end": self.end,
-            "orbit": self.orbit,
         }
         if self.cut is not None:
             result["cut"] = self.cut
@@ -70,7 +68,6 @@ class TrackParams:
             speed=data.get("speed", 1.0),
             begin=data.get("begin", 0.0),
             end=data.get("end", 1.0),
-            orbit=data.get("orbit", 0),
             cut=data.get("cut"),
             legato=data.get("legato"),
             extra_params=data.get("extra_params", {}),

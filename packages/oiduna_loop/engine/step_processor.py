@@ -316,18 +316,19 @@ class StepProcessor:
         # Get spatial effects (reverb, delay, leslie) from MixerLine or Track.fx
         spatial = self._get_spatial_fx(track, mixer_line, modulated)
 
-        # Determine orbit: from MixerLine if available, otherwise from track params
-        orbit = params.orbit
-        if mixer_line and mixer_lines:
-            orbit = mixer_line.get_orbit(mixer_lines)
+        # Build params dict
+        # Note: orbit and cps are NOT included here - extension will inject them via before_send_messages()
+        # Store mixer_line_id if available for extension to use
+        event_params = {}
+        if mixer_line:
+            event_params["mixer_line_id"] = mixer_line.name
 
         # Build extra_params tuple for SynthDef-specific params
         extra_params_tuple = tuple(params.extra_params.items()) if params.extra_params else ()
 
         return OscEvent(
             sound=params.s,
-            orbit=orbit,
-            cps=cps,
+            params=event_params,
             cycle=cycle,
             # Sound params (with modulation)
             gain=final_gain,

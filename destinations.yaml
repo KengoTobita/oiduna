@@ -1,0 +1,68 @@
+# Oiduna Destination Configuration
+#
+# This file defines output destinations for the Oiduna loop engine.
+# Each destination receives scheduled messages and sends them via OSC or MIDI.
+#
+# See: packages/oiduna_destination/models.py for validation rules
+
+destinations:
+  # SuperDirt OSC destination
+  # This is the default destination for TidalCycles patterns
+  superdirt:
+    id: superdirt
+    type: osc
+    host: 127.0.0.1      # SuperCollider/SuperDirt host
+    port: 57120          # SuperDirt default port
+    address: /dirt/play  # SuperDirt OSC address
+    use_bundle: false    # Set to true to bundle same-timing messages
+
+  # Example: MIDI Through chain for hardware synths
+  # Uncomment and configure for your MIDI setup
+  #
+  # midi_chain:
+  #   id: midi_chain
+  #   type: midi
+  #   port_name: "USB MIDI 1"       # Use `mido.get_output_names()` to find
+  #   default_channel: 0             # MIDI channel 0-15
+  #
+  # volca_bass:
+  #   id: volca_bass
+  #   type: midi
+  #   port_name: "USB MIDI 1"       # Same port, different channel
+  #   default_channel: 1
+  #
+  # volca_keys:
+  #   id: volca_keys
+  #   type: midi
+  #   port_name: "USB MIDI 1"
+  #   default_channel: 2
+
+  # Example: Alternative SuperDirt instance (e.g., for testing)
+  #
+  # superdirt_alt:
+  #   id: superdirt_alt
+  #   type: osc
+  #   host: 192.168.1.100  # Remote machine
+  #   port: 57120
+  #   address: /dirt/play
+  #   use_bundle: true      # Enable OSC bundles for timing accuracy
+
+  # Example: Supernova (SuperCollider's alternative synthesis server)
+  #
+  # supernova:
+  #   id: supernova
+  #   type: osc
+  #   host: 127.0.0.1
+  #   port: 57110          # Supernova default port (scsynth alternative)
+  #   address: /s_new      # Synth instantiation message
+  #   use_bundle: false
+
+  # Example: Custom SuperCollider OSC destination
+  #
+  # scsynth_custom:
+  #   id: scsynth_custom
+  #   type: osc
+  #   host: 127.0.0.1
+  #   port: 57110
+  #   address: /custom     # Your custom OSC endpoint
+  #   use_bundle: false

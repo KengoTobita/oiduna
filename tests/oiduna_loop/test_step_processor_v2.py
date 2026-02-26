@@ -1,16 +1,16 @@
 """Tests for StepProcessor Output IR (process_step_v2)."""
 
 import pytest
-from oiduna_core.models.environment import Environment
-from oiduna_core.models.modulation import Modulation
-from oiduna_core.models.output import StepOutput
-from oiduna_core.models.sequence import Event, EventSequence
-from oiduna_core.models.session import CompiledSession
-from oiduna_core.models.step_buffer import StepBuffer
-from oiduna_core.models.track import FxParams, Track, TrackFxParams, TrackMeta, TrackParams
-from oiduna_core.models.track_midi import TrackMidi
-from oiduna_core.models.mixer_line import MixerLine, MixerLineFx
-from oiduna_core.models.send import Send
+from oiduna_core.ir.environment import Environment
+from oiduna_core.modulation.modulation import Modulation
+from oiduna_core.output.output import StepOutput
+from oiduna_core.ir.sequence import Event, EventSequence
+from oiduna_core.ir.session import CompiledSession
+from oiduna_core.modulation.step_buffer import StepBuffer
+from oiduna_core.ir.track import FxParams, Track, TrackFxParams, TrackMeta, TrackParams
+from oiduna_core.ir.track_midi import TrackMidi
+from oiduna_core.ir.mixer_line import MixerLine, MixerLineFx
+from oiduna_core.ir.send import Send
 from oiduna_loop.engine.step_processor import StepProcessor
 from oiduna_loop.state import RuntimeState
 
@@ -144,7 +144,9 @@ class TestOscEventGeneration:
         osc = output.osc_events[0]
         assert osc.sound == "super808"
         assert osc.gain == pytest.approx(0.8)
-        assert osc.orbit == 0
+        # Check params dict (orbit is now in params, not explicit field)
+        assert osc.params["orbit"] == 0
+        assert osc.params["cps"] == 0.5  # BPM 120 / 60 / 4
 
     def test_gain_includes_velocity(self) -> None:
         """Verify gain = base_gain * velocity."""

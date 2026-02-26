@@ -1,792 +1,382 @@
-# Oiduna Architecture
+# システム全体像ドキュメント
 
-**Version**: 1.0
-**Last Updated**: 2026-02-24
-**Status**: Stable
+**バージョン**: 2.0.0
+**更新日**: 2026-02-23
 
----
+> **Single Source of Truth**: このドキュメントはシステムのアーキテクチャと設計意図を説明します。技術スタックの詳細、ポート番号、エンドポイントリスト、ファイル構成などはコードと設定ファイルを参照してください。
 
-## Table of Contents
+## 目次
 
-1. [Design Philosophy](#design-philosophy)
-2. [System Architecture](#system-architecture)
-3. [Layered IR Design](#layered-ir-design)
-4. [Data Flow](#data-flow)
-5. [Loop Engine Details](#loop-engine-details)
-6. [Architectural Decision Records](#architectural-decision-records)
+1. [プロジェクト概要](#1-プロジェクト概要)
+2. [アーキテクチャ](#2-アーキテクチャ)
+3. [なぜこの設計なのか](#3-なぜこの設計なのか)
+4. [通信フロー](#4-通信フロー)
+5. [詳細情報の参照方法](#5-詳細情報の参照方法)
 
 ---
 
-## Design Philosophy
+## 1. プロジェクト概要
 
-### Oiduna's Mission
+### 1.1 全体の目的
 
-Oiduna exists to eliminate the phrase "we can't do that technically" from live coding:
+ライブコーディング環境において、**表現力の高いDSL言語**から**リアルタイムオーディオ制御**まで、シームレスに統合されたシステムを提供すること。
 
-```
-1. "We can't do that technically" → Never
-2. "Standard approaches should be surprisingly easy" → Always
-3. "Non-standard approaches are possible with Distribution-side adjustments" → Flexible
-```
+### 1.2 主要コンポーネント
 
-### Core Principles
+#### Oiduna - リアルタイムループエンジン
 
-#### 1. Simplicity Over Features
+**責任**: パターンデータをリアルタイムでSuperDirtとMIDIデバイスに出力
 
-Oiduna Core is intentionally minimal:
+**なぜ存在するのか**:
+- ライブパフォーマンス中に即座にパターンを変更したい
+- SuperDirtとMIDI両方に対応した統一インターフェースが必要
+- HTTPでリモートコントロール可能にしたい
 
-- **256-step fixed loop** - No variable loop lengths, no complex time signatures
-- **No DSL parsing** - Receives pre-compiled IR only
-- **No music theory** - Works with concrete MIDI note numbers, not scales/chords
-- **No audio generation** - Delegates to SuperDirt and MIDI devices
+**主要機能**:
+- 256ステップループエンジン（16ビート）
+- SuperDirt OSC出力
+- MIDI出力
+- HTTP REST API
+- SSEによるリアルタイム状態配信
 
-**Why**: A simple, stable core enables complex creativity at higher layers.
+詳細: `oiduna/README.md`、`oiduna/pyproject.toml`
 
-#### 2. Separation of Concerns
+#### MARS - DSLコンパイラ
 
-```
-┌─────────────────────────────────────────────────────┐
-│                  Oiduna Core                        │
-│  - 256 step fixed format player                    │
-│  - No music theory concepts                        │
-│  - Receives pre-resolved note numbers              │
-│  - Simple, stable, fast                            │
-└─────────────────────────────────────────────────────┘
-                      ▲
-                      │ IR (JSON)
-                      │ (concrete note numbers)
-                      │
-┌─────────────────────┴───────────────────────────────┐
-│              Distribution (Multiple possible)       │
-│  - DSL parsing & compilation                       │
-│  - Pitch resolution (scale/chord → note numbers)   │
-│  - Time signature & music theory processing        │
-│  - Conversion to Oiduna format                     │
-│  - Creative freedom & custom implementation        │
-└─────────────────────────────────────────────────────┘
-```
+**責任**: 高レベルDSL言語をOidunaの中間表現にコンパイル
 
-**Oiduna's Responsibility**: Playback engine, timing precision, output routing
-**Distribution's Responsibility**: Music theory, DSL design, pitch resolution
+**なぜ存在するのか**:
+- 簡潔な構文で複雑なパターンを記述したい
+- プロジェクト管理機能が必要
+- Webベースのエディタで編集したい
 
-This separation enables:
-- Multiple DSLs (MARS, TidalCycles-like, custom) to target Oiduna
-- Oiduna improvements benefit all Distributions
-- Distribution innovation doesn't require Oiduna changes
+**主要機能**:
+- DSL v3.1パーサー（Larkベース）
+- プロジェクト/ソング/クリップ管理
+- Webベースエディタ
+- Oiduna統合
 
-#### 3. Immutability & Type Safety
-
-All IR models are:
-- **Immutable** (`dataclass(frozen=True)`) - Predictable, thread-safe, cacheable
-- **Type-safe** (Python 3.13 + mypy) - Compile-time error detection
-- **Self-documenting** - Types serve as live documentation
-
-#### 4. Performance by Design
-
-- **O(1) event lookup** - Step index for constant-time event retrieval
-- **Fixed loop length** - Eliminates boundary condition complexity
-- **Anchor-based timing** - Prevents drift accumulation
-- **Minimal allocations** - Immutable data structures enable sharing
+詳細: `Modular_Audio_Real-time_Scripting/README.md`、`MARS_for_oiduna/README.md`
 
 ---
 
-## System Architecture
+## 2. アーキテクチャ
 
-### Package Structure
-
-```
-oiduna/
-├── packages/
-│   ├── oiduna_core/          # Core engine & models
-│   │   ├── ir/               # IR data models (4 layers)
-│   │   ├── engine/           # Loop engine implementation
-│   │   ├── output/           # OSC/MIDI senders
-│   │   └── modulation/       # Parameter modulation
-│   │
-│   └── oiduna_api/           # HTTP API server
-│       ├── routes/           # FastAPI routes
-│       ├── models/           # API request/response models
-│       └── main.py           # API entry point
-│
-├── scripts/                  # Startup scripts
-├── docs/                     # Documentation
-└── tests/                    # Test suites
-```
-
-### Dependency Map
+### 2.1 全体データフロー
 
 ```
-┌─────────────────────────────────────────┐
-│           oiduna_api                    │
-│  - FastAPI HTTP server                  │
-│  - Pydantic validation                  │
-│  - SSE streaming                        │
-│  - OpenAPI docs                         │
-└──────────────┬──────────────────────────┘
-               │ depends on
-               ↓
-┌─────────────────────────────────────────┐
-│           oiduna_core                   │
-│  - IR models (immutable dataclasses)    │
-│  - Loop engine (5 concurrent tasks)     │
-│  - OSC sender (python-osc)              │
-│  - MIDI sender (python-rtmidi)          │
-└──────────────┬──────────────────────────┘
-               │ outputs to
-        ┌──────┴───────┐
-        ↓              ↓
-┌─────────────┐  ┌─────────────┐
-│ SuperDirt   │  │ MIDI Device │
-│ (OSC/UDP)   │  │             │
-└─────────────┘  └─────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│ ユーザー                                                     │
+│   ↓ MARS DSLコード                                          │
+├─────────────────────────────────────────────────────────────┤
+│ MARS DSL Compiler                                           │
+│   ├─ Larkパーサー (DSL → AST)                               │
+│   ├─ RuntimeSession生成 (mars_dsl)                          │
+│   └─ CompiledSession変換 (oiduna_core)                     │
+│     ↓ HTTP POST /playback/pattern (JSON)                    │
+├─────────────────────────────────────────────────────────────┤
+│ Oiduna Loop Engine                                          │
+│   ├─ CompiledSessionデシリアライズ                          │
+│   ├─ EventSequence構築（ステップインデックス作成）          │
+│   └─ ループ再生                                             │
+│     ├─ OSCメッセージ → SuperCollider → サウンド再生         │
+│     └─ MIDIメッセージ → MIDIデバイス → サウンド再生         │
+└─────────────────────────────────────────────────────────────┘
+        ↑ SSE /stream (リアルタイム状態配信)
+      ユーザー
 ```
 
-### External Dependencies
+**なぜこのフロー**:
+- **DSLとエンジンの分離**: それぞれを独立して進化させられる
+- **HTTP通信**: 任意のフロントエンドから制御可能
+- **JSON形式**: 言語非依存、デバッグ容易
 
-**Core (`oiduna_core`)**:
-- `python-osc` - OSC protocol for SuperDirt
-- `python-rtmidi` - MIDI output
-- `mido` - MIDI message handling
+### 2.2 3層IR（中間表現）アーキテクチャ
 
-**API (`oiduna_api`)**:
-- `fastapi` - HTTP server framework
-- `uvicorn` - ASGI server
-- `pydantic` - Data validation
-- `sse-starlette` - Server-Sent Events
+```
+┌───────────────────────────────────────────────────────────┐
+│ CompiledSession                                           │
+│                                                           │
+│  ┌─────────────────────────────────────────────────────┐  │
+│  │ Layer 1: Environment（演奏環境）                     │  │
+│  │  - BPM、スケール、スウィング                         │  │
+│  │  - コード進行（オプション）                          │  │
+│  └─────────────────────────────────────────────────────┘  │
+│                                                           │
+│  ┌─────────────────────────────────────────────────────┐  │
+│  │ Layer 2: Track Configuration（トラック設定）         │  │
+│  │  - Track: サウンドパラメータ、エフェクト             │  │
+│  │  - TrackMidi: MIDIチャンネル、トランスポーズ         │  │
+│  │  - MixerLine: バス/グループ、空間エフェクト          │  │
+│  └─────────────────────────────────────────────────────┘  │
+│                                                           │
+│  ┌─────────────────────────────────────────────────────┐  │
+│  │ Layer 3: Pattern Data（パターンデータ）              │  │
+│  │  - EventSequence: ステップインデックス付きイベント   │  │
+│  │  - Event: トリガータイミング、ノート、ベロシティ     │  │
+│  └─────────────────────────────────────────────────────┘  │
+└───────────────────────────────────────────────────────────┘
+```
 
-**Notable Absences**:
-- ❌ No `pyzmq` - Uses HTTP instead of ZeroMQ (vs original MARS)
-- ❌ No `lark` - No DSL parsing in core
-- ❌ No audio libraries - Delegates to SuperCollider
+**なぜ3層に分離するのか**:
+
+1. **音色とパターンの独立性**
+   - 同じパターンを異なる音色で演奏可能
+   - パターンを変更せずに音色だけ調整可能
+
+2. **段階的なコンパイル**
+   - DSL → Layer 1, 2, 3の順に構築
+   - 各層を独立してテスト可能
+
+3. **効率的なリアルタイム処理**
+   - Layer 3のEventSequenceはステップインデックス（dict[int, list[int]]）を持つ
+   - O(1)で特定ステップのイベント検索が可能
+   - リアルタイム再生時の高速検索を実現
+
+詳細: [データモデルリファレンス](03_データモデルリファレンス.md)
+
+### 2.3 コンポーネント構成
+
+```
+┌──────────────────────────────────────────────────────────┐
+│ MARS_for_oiduna (HTTP API)                               │
+│                                                          │
+│  mars_api (FastAPI)                                      │
+│    ├─ mars_dsl (コンパイラ)                              │
+│    ├─ ProjectManager (プロジェクト永続化)                │
+│    └─ OidunaClient (HTTP通信)                            │
+│          │                                               │
+│          ↓ HTTP                                          │
+├──────────────────────────────────────────────────────────┤
+│ oiduna (HTTP API)                                        │
+│                                                          │
+│  oiduna_api (FastAPI)                                    │
+│    └─ oiduna_loop (ループエンジン)                       │
+│         └─ oiduna_core (IRモデル)                        │
+│              │                                           │
+│              ├─ OSC → SuperCollider + SuperDirt          │
+│              └─ MIDI → MIDIデバイス                      │
+└──────────────────────────────────────────────────────────┘
+                ↓ ファイルシステム
+┌──────────────────────────────────────────────────────────┐
+│ project_data/ (プロジェクト保存)                          │
+│  └─ {project}/                                           │
+│      ├─ project.json                                     │
+│      └─ songs/{song}/clips/{clip}.json                   │
+└──────────────────────────────────────────────────────────┘
+```
+
+**責任の分離**:
+- **mars_dsl**: DSLコンパイル（構文解析、最適化）
+- **mars_api**: プロジェクト管理、HTTP API
+- **oiduna_loop**: リアルタイム再生エンジン
+- **oiduna_api**: 再生制御、トラック管理、HTTP API
+
+### 2.4 MARSとOidunaのモデル分離
+
+MARS DSL (mars_dsl) と Oiduna Core (oiduna_core) は別々のデータモデルを持ちます。
+
+**mars_dsl (Runtime表現)**:
+- DSLコンパイラの出力
+- 後方互換性を重視
+- 例: `sound`フィールド、キャメルケースエフェクト名
+
+**oiduna_core (Compiled表現)**:
+- ループエンジンの入力
+- パフォーマンス最適化を重視
+- 例: `params`フィールド、スネークケースエフェクト名
+
+**なぜ分離するのか**:
+- **責任の分離**: DSLの進化とエンジンの最適化を独立して行える
+- **互換性**: MARSのRuntime表現は後方互換性を維持、Oidunaは最適化のために変更可能
+- **柔軟性**: MARS以外のDSLやフロントエンドもOidunaを使用できる
+
+**変換**: `mars_compiler/model_converter.py`で自動的に行われます。
+
+詳細: [データモデルリファレンス](03_データモデルリファレンス.md#4-モデル間の関係)
 
 ---
 
-## Layered IR Design
+## 3. なぜこの設計なのか
 
-Oiduna uses a **4-layer IR (Intermediate Representation)** architecture. Each layer has a distinct purpose and can be modified independently.
+### 3.1 イミュータブルデータ構造
 
-### Overview
+すべてのIRモデルは`dataclass(frozen=True)`でイミュータブルです。
 
-```
-CompiledSession
-│
-├── 🌍 Environment Layer
-│   Purpose: Global playback settings
-│   Models:  Environment, Chord
-│
-├── 🎛️ Configuration Layer
-│   Purpose: Individual track/mixer settings
-│   Models:  Track, TrackMidi, MixerLine
-│
-├── 🎵 Pattern Layer
-│   Purpose: Time-axis event definitions
-│   Models:  EventSequence, Event
-│
-└── 🎮 Control Layer
-    Purpose: Playback control & snapshots
-    Models:  Scene, ApplyCommand
-```
+**理由**:
+- **予測可能性**: データの状態が変わらないため、デバッグが容易
+- **並行性**: マルチスレッド環境で安全
+- **キャッシュ**: ハッシュ可能なため、効率的なキャッシングが可能
 
-### Why Layered?
+### 3.2 型安全性
 
-**Traditional Approach** (monolithic):
-```python
-# Everything mixed together
-track = {
-    "bpm": 120,              # Environment concern
-    "sound": "bd",           # Configuration concern
-    "events": [...],         # Pattern concern
-    "apply_at": "bar"        # Control concern
-}
-# Hard to modify one aspect without affecting others
-```
+Pythonの型ヒントを完全に使用し、mypyで厳密に型チェックしています。
 
-**Oiduna Approach** (layered):
-```python
-session = CompiledSession(
-    environment=Environment(bpm=120),           # Layer 1
-    tracks={"bd": Track(...)},                  # Layer 2
-    sequences={"bd": EventSequence(...)},       # Layer 3
-    apply=ApplyCommand(timing="bar")            # Layer 4
-)
-# Each layer can be modified independently
-```
+**理由**:
+- **コンパイル時エラー検出**: 実行前に型エラーを発見
+- **ドキュメントとしての型**: コードが自己文書化される
+- **IDEサポート**: 自動補完とリファクタリング支援
 
-### Layer 1: Environment
+### 3.3 HTTP APIによる分離
 
-**Responsibility**: Settings shared across all tracks
+MARS APIとOiduna APIは別々のHTTPサーバーです。
 
-**Models**: `Environment`, `Chord`
+**理由**:
+- **独立したデプロイ**: それぞれを独立してスケール可能
+- **フロントエンドの柔軟性**: 任意のクライアントから制御可能（CLI、Web UI、他のプログラミング言語）
+- **テスト容易性**: 各APIを独立してテスト可能
 
-**Key Fields**:
-```python
-@dataclass(frozen=True)
-class Environment:
-    bpm: float = 120.0              # Tempo
-    default_gate: float = 1.0       # Default note length
-    swing: float = 0.0              # Swing amount (0.0-1.0)
-    loop_steps: int = 256           # Fixed, immutable
-```
+### 3.4 SSE（Server-Sent Events）
 
-**Design Notes**:
-- `loop_steps` is always 256, never changes
-- BPM changes affect all tracks simultaneously
-- Future: `scale` and `chords` fields will be removed (v1.1) - music theory belongs in Distribution
+Oiduna APIはSSEでリアルタイム状態を配信します。
 
-**Why Separate**: Ensures all tracks play at the same tempo, prevents inconsistencies.
+**理由**:
+- **シンプルさ**: WebSocketより実装が簡単
+- **一方向通信**: サーバーからクライアントへの状態配信のみで十分
+- **HTTP互換**: 既存のHTTPインフラをそのまま使用可能
 
-### Layer 2: Configuration
+### 3.5 プロジェクト管理のJSON永続化
 
-**Responsibility**: Per-track audio settings and routing
+プロジェクト、ソング、クリップはJSONファイルとして保存されます。
 
-**Three Track Types**:
-
-#### Audio Tracks (SuperDirt)
-
-**Model**: `Track`
-
-```python
-@dataclass(frozen=True)
-class Track:
-    meta: TrackMeta              # ID, mute, solo
-    params: TrackParams          # Sound parameters
-    fx: FxParams                 # Legacy effects
-    track_fx: TrackFxParams      # Tone shaping (v5)
-    sends: tuple[Send, ...]      # Mixer routing
-    modulations: dict[str, Modulation]
-```
-
-**Signal Flow**:
-```
-Event → Track.params (s, gain, pan) → Track.track_fx (filter, dist)
-     → Send → MixerLine → MixerLine.fx (reverb, delay) → Output
-```
-
-#### MIDI Tracks
-
-**Model**: `TrackMidi`
-
-```python
-@dataclass(frozen=True)
-class TrackMidi:
-    track_id: str
-    channel: int                 # MIDI channel (0-15)
-    velocity: int = 127
-    transpose: int = 0           # Semitones
-    mute: bool = False
-    solo: bool = False
-    cc_modulations: dict[int, Modulation]
-```
-
-#### Mixer Lines
-
-**Model**: `MixerLine`
-
-```python
-@dataclass(frozen=True)
-class MixerLine:
-    name: str                    # e.g., "drums_bus"
-    include: tuple[str, ...]     # Track IDs in this line
-    volume: float = 1.0
-    pan: float = 0.5
-    mute: bool = False
-    solo: bool = False
-    output: int = 0              # Output orbit
-    dynamics: MixerLineDynamics  # Limiter, compressor
-    fx: MixerLineFx              # Reverb, delay, leslie
-```
-
-**Why Three Types**: Different responsibilities (audio synthesis, MIDI control, bus mixing) require different fields. Extensible for future types (CV, OSC).
-
-### Layer 3: Pattern
-
-**Responsibility**: Defining *when* and *what* to play
-
-**Models**: `EventSequence`, `Event`
-
-```python
-@dataclass(frozen=True, slots=True)
-class Event:
-    step: int                    # Position (0-255)
-    velocity: float = 1.0        # Intensity (0.0-1.0)
-    note: int | None = None      # MIDI note number
-    gate: float = 1.0            # Note length ratio
-    offset_ms: float = 0.0       # Micro-timing (NEW in v1.0)
-
-@dataclass(frozen=True)
-class EventSequence:
-    track_id: str
-    _events: tuple[Event, ...]
-    _step_index: dict[int, list[int]]  # O(1) lookup
-```
-
-**Step Index Design**:
-```python
-# Construction (once)
-_step_index = {
-    0: [0, 1, 2],    # Events at step 0
-    4: [3],          # Event at step 4
-    8: [4, 5],       # Events at step 8
-    # ... sparse dictionary
-}
-
-# Lookup (every tick, must be O(1))
-current_step = 64
-event_indices = sequence._step_index.get(current_step, [])  # O(1)
-for idx in event_indices:
-    event = sequence._events[idx]
-    send_to_superdirt(event)
-```
-
-**Why Separate from Configuration**: Same pattern can be played with different sounds. Pattern changes don't affect track settings.
-
-### Layer 4: Control
-
-**Responsibility**: *When* and *how* to apply changes
-
-**Models**: `Scene`, `ApplyCommand`
-
-#### Scenes
-
-**Model**: `Scene`
-
-```python
-@dataclass(frozen=True)
-class Scene:
-    name: str
-    environment: Environment | None      # Override global settings
-    tracks: dict[str, Track]             # Track snapshots
-    tracks_midi: dict[str, TrackMidi]
-    sequences: dict[str, EventSequence]
-    mixer_lines: dict[str, MixerLine]
-```
-
-**Use Case**: Switch between "intro", "verse", "chorus" configurations on-the-fly.
-
-#### Apply Commands
-
-**Model**: `ApplyCommand`
-
-```python
-@dataclass(frozen=True)
-class ApplyCommand:
-    timing: Literal["now", "beat", "bar", "seq"]  # When to apply
-    track_ids: list[str]                          # Which tracks (empty = all)
-    scene_name: str | None                        # Optional scene reference
-```
-
-**Why Separate**: Pattern data (what to play) is independent from control metadata (when to apply). Enables queuing, synchronization, and real-time updates.
+**理由**:
+- **シンプルさ**: データベース不要、ファイルシステムのみで動作
+- **可読性**: テキストエディタで直接編集可能
+- **バージョン管理**: Gitなどのバージョン管理システムで管理可能
+- **移植性**: プロジェクトディレクトリをコピーするだけで移行可能
 
 ---
 
-## Data Flow
+## 4. 通信フロー
 
-### Complete Flow: Client → Audio Output
-
-```
-┌──────────────────────────────────────────┐
-│ 1. Client (e.g., MARS Distribution)     │
-│    - Write DSL code                      │
-│    - Compile to CompiledSession          │
-│    - Serialize to JSON                   │
-└───────────────┬──────────────────────────┘
-                │
-                │ HTTP POST /playback/session
-                │ Content-Type: application/json
-                ↓
-┌──────────────────────────────────────────┐
-│ 2. Oiduna API (FastAPI)                  │
-│    - Parse JSON                          │
-│    - Validate with Pydantic              │
-│    - Deserialize to CompiledSession      │
-└───────────────┬──────────────────────────┘
-                │
-                │ Python object
-                ↓
-┌──────────────────────────────────────────┐
-│ 3. Loop Engine (oiduna_core)             │
-│    ┌─ Environment: Apply BPM             │
-│    ├─ Configuration: Initialize tracks   │
-│    ├─ Pattern: Build step indices        │
-│    └─ Control: Schedule application      │
-└───────────────┬──────────────────────────┘
-                │
-                │ Start 256-step loop
-                ↓
-┌──────────────────────────────────────────┐
-│ 4. Loop Execution (every ~31ms @ 120BPM) │
-│    For each step:                        │
-│      1. Check step_index for events      │  O(1) lookup
-│      2. Merge Event + Track params       │
-│      3. Generate OSC/MIDI messages       │
-│      4. Send to outputs                  │
-└───────────────┬──────────────────────────┘
-                │
-         ┌──────┴───────┐
-         ↓              ↓
-┌────────────────┐  ┌──────────────┐
-│ 5a. SuperDirt  │  │ 5b. MIDI Out │
-│  (OSC/UDP)     │  │  (rtmidi)    │
-│  /dirt/play    │  │  Note On/Off │
-└────────┬───────┘  └──────┬───────┘
-         ↓                 ↓
-    🔊 Audio Output   🎹 MIDI Synth
-```
-
-### Sequence Diagram
+### 4.1 コンパイル＆適用フロー
 
 ```
-Client          API             Engine          SuperDirt
-  │              │               │               │
-  ├─POST session─>│               │               │
-  │              ├─deserialize───>│               │
-  │              │               ├─build indices─>│
-  │              │<──ok──────────┤               │
-  │<─201─────────┤               │               │
-  │              │               │               │
-  ├─POST start──>│               │               │
-  │              ├─start()──────>│               │
-  │              │               ├─loop begins───┤
-  │<─200─────────┤               │               │
-  │              │               │               │
-  │              │               ├─step 0────────>│
-  │              │               ├─step 1────────>│
-  │              │               ├─step 2────────>│
-  │              │               │  (continues)  │
+1. ユーザー → MARS API
+   POST /compile/apply
+   Body: {dsl: "Track(\"bd\"):\n    ..."}
+
+2. MARS API内部
+   ├─ DSL → Larkパーサー
+   ├─ AST → RuntimeSession
+   └─ RuntimeSession → CompiledSession
+
+3. MARS API → Oiduna API
+   POST /playback/pattern
+   Body: CompiledSession JSON
+
+4. Oiduna API内部
+   ├─ JSON → CompiledSessionデシリアライズ
+   ├─ EventSequence構築（ステップインデックス作成）
+   └─ ループエンジンに適用
+
+5. ループ再生開始
+   ├─ OSCメッセージ → SuperCollider
+   └─ MIDIメッセージ → MIDIデバイス
 ```
 
-### Timing Diagram
+**重要なポイント**:
+- **ステップ2とステップ3の分離**: DSLコンパイルとループエンジンが独立
+- **ステップ4のEventSequence構築**: リアルタイム再生のための高速検索インデックス作成
+
+### 4.2 プロジェクト管理フロー
 
 ```
-Time (ms)   Step    Action
-─────────────────────────────────────────────
-0           0       ┌─ Load session
-                    │  - Deserialize IR
-                    │  - Build step indices  (~10ms)
-                    └─ Ready
+プロジェクト作成
+  → ソング作成
+    → クリップ作成（DSLコード含む）
+      → クリップ適用
+        ├─ DSLコンパイル (MARS API)
+        └─ パターン適用 (Oiduna API)
+```
 
-10          0       ┌─ Start command
-                    └─ Begin loop
+**永続化**:
+- プロジェクト: `project_data/{project}/project.json`
+- ソング: `project_data/{project}/songs/{song}/song.json`
+- クリップ: `project_data/{project}/songs/{song}/clips/{clip}.json`
 
-10          0       ┌─ Tick 0
-                    │  - Lookup events (O(1))
-                    │  - Send OSC messages
-                    └─ Wait for next step
+### 4.3 リアルタイムストリーム（SSE）
 
-41          1       ┌─ Tick 1
-                    └─ ...
+```
+1. ユーザー → Oiduna API
+   GET /stream
+   Accept: text/event-stream
 
-72          2       ┌─ Tick 2
-                    └─ ...
+2. Oiduna API → ユーザー
+   HTTP 200
+   Content-Type: text/event-stream
 
-(31ms per step @ 120 BPM, 256 steps)
+3. ループ再生中、毎ビート繰り返し
+   data: {"step": 64, "bpm": 120, "playing": true, ...}
+   (空行2つで終端)
+```
+
+**用途**: WebベースのUIでリアルタイムに現在のステップ位置、BPM、再生状態を表示
+
+---
+
+## 5. 詳細情報の参照方法
+
+このドキュメントは概念とアーキテクチャを説明しています。具体的な詳細情報は以下を参照してください。
+
+### 技術スタック詳細
+
+**Oiduna**:
+- `oiduna/pyproject.toml` - 依存ライブラリとバージョン
+- `oiduna/README.md` - プロジェクト概要
+
+**MARS**:
+- `Modular_Audio_Real-time_Scripting/pyproject.toml` - 依存ライブラリとバージョン
+- `Modular_Audio_Real-time_Scripting/README.md` - プロジェクト概要
+
+### ポート番号とエンドポイント
+
+**設定ファイル**:
+- Oiduna: 環境変数（`API_PORT`など）、デフォルトはコード参照
+- MARS: 設定ファイルまたはコード参照
+
+**エンドポイントリスト**:
+- **自動生成ドキュメント**: サーバー起動後、`http://localhost:{port}/docs` にアクセス（Swagger UI）
+- **コード**: `oiduna_api/routes/`、`mars_api/routes/` のFastAPIルーター
+
+### ファイル構成
+
+**実際のファイルシステム**: `tree`コマンドまたはファイルエクスプローラーで確認
+
+### データモデル
+
+**コード**:
+- Oiduna Core IR: `oiduna/packages/oiduna_core/ir/`
+- MARS DSL Runtime: `Modular_Audio_Real-time_Scripting/mars_dsl/models.py`
+
+**ドキュメント**: [データモデルリファレンス](03_データモデルリファレンス.md)
+
+### 開発状況
+
+**テスト実行**:
+```bash
+cd oiduna && uv run pytest
+cd Modular_Audio_Real-time_Scripting && uv run pytest
+```
+
+**型チェック**:
+```bash
+cd oiduna && uv run mypy packages
+cd Modular_Audio_Real-time_Scripting && uv run mypy apps packages
 ```
 
 ---
 
-## Loop Engine Details
+## 関連ドキュメント
 
-### Architecture
-
-The Loop Engine runs **5 concurrent asyncio tasks**:
-
-```python
-async def run_engine():
-    async with asyncio.TaskGroup() as tg:
-        tg.create_task(step_loop())        # Main sequencer
-        tg.create_task(clock_loop())       # MIDI clock (24 PPQ)
-        tg.create_task(note_off_loop())    # MIDI note-off scheduler
-        tg.create_task(command_loop())     # Real-time commands
-        tg.create_task(heartbeat_loop())   # Connection monitoring
-```
-
-### Task Responsibilities
-
-#### 1. Step Loop (Main Sequencer)
-
-**Frequency**: ~31ms per step (@ 120 BPM)
-**Responsibility**: Process events at each step
-
-```python
-async def step_loop():
-    while playing:
-        current_step = position.step  # 0-255
-
-        # O(1) event lookup
-        for seq in sequences.values():
-            event_indices = seq._step_index.get(current_step, [])
-            for idx in event_indices:
-                event = seq._events[idx]
-                process_event(event)
-
-        # Advance step
-        position.step = (position.step + 1) % 256
-
-        # Wait for next step (anchor-based timing)
-        await sleep_until(next_step_time)
-```
-
-**Timing Strategy**: Anchor-based to prevent drift
-```python
-# BAD: Accumulates drift
-await asyncio.sleep(step_duration)  # Each sleep has ~1-2ms error
-
-# GOOD: Anchored to start time
-loop_start = time.perf_counter()
-step_count = 0
-while True:
-    target_time = loop_start + (step_count * step_duration)
-    await sleep_until(target_time)  # Corrects drift each step
-    step_count += 1
-```
-
-#### 2. Clock Loop (MIDI Sync)
-
-**Frequency**: ~5.2ms per tick (24 PPQ @ 120 BPM)
-**Responsibility**: Send MIDI clock messages
-
-```python
-async def clock_loop():
-    while playing:
-        midi_sender.send_clock()
-        await asyncio.sleep(clock_interval)  # 24 ticks per beat
-```
-
-#### 3. Note-Off Loop
-
-**Frequency**: Variable (based on scheduled note-offs)
-**Responsibility**: Send MIDI note-off messages
-
-```python
-async def note_off_loop():
-    while True:
-        now = time.perf_counter()
-        due_notes = [n for n in scheduled_notes if n.off_time <= now]
-        for note in due_notes:
-            midi_sender.send_note_off(note.channel, note.pitch)
-        await asyncio.sleep(0.001)  # 1ms resolution
-```
-
-#### 4. Command Loop
-
-**Frequency**: Variable (event-driven)
-**Responsibility**: Process real-time commands
-
-```python
-async def command_loop():
-    while True:
-        cmd = await command_queue.get()
-        match cmd:
-            case "load_session": load_session(cmd.data)
-            case "start": start_playback()
-            case "stop": stop_playback()
-```
-
-#### 5. Heartbeat Loop
-
-**Frequency**: 5 seconds
-**Responsibility**: Monitor connections, emit SSE heartbeats
-
-```python
-async def heartbeat_loop():
-    while True:
-        check_connections()
-        emit_sse_heartbeat()
-        await asyncio.sleep(5.0)
-```
-
-### Concurrency Model
-
-```
-┌──────────────────────────────────────────┐
-│        Python asyncio Event Loop         │
-│  (Single-threaded, cooperative)          │
-│                                          │
-│  ┌─────────┐  ┌─────────┐  ┌─────────┐ │
-│  │ Step    │  │ Clock   │  │ Note    │ │
-│  │ Loop    │  │ Loop    │  │ Off     │ │
-│  └─────────┘  └─────────┘  └─────────┘ │
-│  ┌─────────┐  ┌─────────┐              │
-│  │ Command │  │ Heart   │              │
-│  │ Loop    │  │ beat    │              │
-│  └─────────┘  └─────────┘              │
-└──────────────────────────────────────────┘
-         │
-         │ GIL (Global Interpreter Lock)
-         │ Shared across all tasks
-         ↓
-    Performance consideration:
-    - Heavy processing blocks all tasks
-    - See PERFORMANCE.md for mitigation
-```
+- [現状分析](01_現状分析.md) - 実装状況とテスト状況
+- [問題点と改善提案](02_問題点と改善提案.md) - 改善アクションと優先順位
+- [データモデルリファレンス](03_データモデルリファレンス.md) - データモデル設計と参照
+- [ADR一覧](knowledge/adr/) - 重要な設計判断の記録
 
 ---
 
-## Architectural Decision Records
-
-### ADR-001: Why HTTP API?
-
-**Context**: Original MARS used ZeroMQ for IPC.
-
-**Decision**: Use HTTP REST API for Oiduna.
-
-**Rationale**:
-1. **Language Agnostic** - Any language can be a Distribution (Python, Rust, JavaScript)
-2. **No Binary Dependencies** - No `pyzmq` compilation issues
-3. **Debugging** - curl, browsers, standard tools work out-of-the-box
-4. **Firewall Friendly** - Works over networks, through proxies
-5. **Self-Documenting** - OpenAPI/Swagger automatic docs
-
-**Trade-offs**:
-- ❌ Slightly higher latency (~1-2ms vs ZeroMQ ~0.1ms)
-- ✅ Acceptable for ~31ms step resolution
-- ❌ More overhead than binary protocols
-- ✅ JSON is human-readable and debuggable
-
-**Status**: Stable
-
-### ADR-002: Why 256 Fixed Steps?
-
-**Context**: Could support variable loop lengths (128, 256, 512, etc.).
-
-**Decision**: Fixed 256 steps, immutable.
-
-**Rationale**:
-1. **Simplicity** - No edge cases for loop boundaries
-2. **O(1) Indexing** - Fixed-size arrays, predictable memory
-3. **Hardware Inspiration** - Classic sequencers (TR-808, Octatrack) use fixed lengths
-4. **Distribution Flexibility** - Distributions can map any time signature to 256 steps
-
-**Trade-offs**:
-- ❌ Unusual time signatures require Distribution-side mapping
-- ✅ But this is Distribution's responsibility anyway
-- ❌ Can't have 1024-step mega-loops
-- ✅ But 256 steps = 32 seconds @ 120 BPM (sufficient for most use cases)
-
-**Examples**:
-```
-4/4: 16 bars × 16 steps/bar = 256 steps (perfect fit)
-3/4: 21 bars × 12 steps/bar = 252 steps (4 unused)
-5/4: 12 bars × 20 steps/bar = 240 steps (16 unused)
-7/8: 18 bars × 14 steps/bar = 252 steps (4 unused)
-```
-
-**Status**: Stable
-
-### ADR-003: Why Step Index?
-
-**Context**: Could iterate all events every step, or use binary search.
-
-**Decision**: Pre-compute step→events index.
-
-**Rationale**:
-1. **O(1) Lookup** - Constant time, critical for real-time
-2. **Memory Trade-off** - Extra dict, but small (~1KB for typical session)
-3. **Build Once** - Computed at load time, not per-tick
-
-**Performance**:
-```
-Naive search:    O(N) per step, N = total events (unacceptable)
-Binary search:   O(log N) per step (acceptable, but not optimal)
-Step index:      O(1) per step (optimal)
-
-Real-world @ 120 BPM, 50 tracks, 256 steps:
-- Naive: 12,800 comparisons/tick = ~400μs (misses 31ms budget)
-- Index: 50 dict lookups = ~5μs (comfortable)
-```
-
-**Status**: Stable
-
-### ADR-004: Why Immutable IR?
-
-**Context**: Could use mutable dataclasses or plain dicts.
-
-**Decision**: All IR models use `dataclass(frozen=True)`.
-
-**Rationale**:
-1. **Predictability** - Data never changes after creation
-2. **Thread Safety** - No locking needed, safe concurrent access
-3. **Cacheability** - Hashable, can be dict keys
-4. **Debugging** - Easier to reason about, no hidden mutations
-
-**Trade-offs**:
-- ❌ Updates require creating new objects
-- ✅ But session updates are infrequent (~once per pattern change)
-- ❌ Slightly more memory (can't reuse objects)
-- ✅ But modern GC handles this well
-
-**Status**: Stable
-
-### ADR-005: Why 4 Layers, Not 3?
-
-**Context**: Original design called it "3-layer IR".
-
-**Decision**: Rename to "4-layer" or "Layered IR".
-
-**Rationale**:
-1. **Clarity** - Configuration layer has 3 distinct types (Track, TrackMidi, MixerLine)
-2. **Control Layer** - ApplyCommand is separate from Pattern data
-3. **Extensibility** - Easy to add new layer types (e.g., Automation Layer in future)
-
-**Layers**:
-1. Environment - Global settings
-2. Configuration - Track/mixer setup
-3. Pattern - Time-axis events
-4. Control - Application timing
-
-**Status**: Adopted in documentation
-
-### ADR-006: Why Separate API Package?
-
-**Context**: Could have single monolithic package.
-
-**Decision**: Split `oiduna_core` and `oiduna_api`.
-
-**Rationale**:
-1. **Reusability** - Core can be embedded without HTTP dependencies
-2. **Testing** - Core logic testable without FastAPI
-3. **Alternative Interfaces** - Could add gRPC, WebSocket, CLI using same core
-4. **Dependency Isolation** - Web concerns don't leak into engine
-
-**Trade-offs**:
-- ❌ More files, more packages
-- ✅ Clearer boundaries, better architecture
-
-**Status**: Stable
-
----
-
-## Future Directions
-
-### Considered for v1.1+
-
-1. **Multi-Process Loop Engine** - Isolate engine from API for GIL independence (see PERFORMANCE.md)
-2. **Remove Music Theory Fields** - Delete `Environment.scale` and `Environment.chords` (Distribution responsibility)
-3. **Control Voltage (CV) Tracks** - Add `TrackCV` for modular synth control
-4. **Automation Layer** - 5th IR layer for parameter automation
-5. **Binary Protocol** - Protobuf or MessagePack alternative to JSON for low-latency
-
-### Not Planned
-
-1. **Variable Loop Lengths** - Conflicts with simplicity principle
-2. **Built-in DSL** - Oiduna is a player, not a compiler
-3. **Audio Synthesis** - SuperCollider does this better
-4. **DAW Features** - Out of scope (project management, recording, etc.)
-
----
-
-## Conclusion
-
-Oiduna's architecture prioritizes:
-1. **Simplicity** - Fixed format, minimal concepts
-2. **Separation** - Clear boundaries between engine and Distributions
-3. **Performance** - O(1) lookups, immutable data, anchor-based timing
-4. **Flexibility** - Layered IR enables independent modifications
-
-This design enables **both standard and experimental use cases** while maintaining a **simple, stable core**.
-
----
-
-**Document Version**: 1.0
-**Last Updated**: 2026-02-24
-**Next Review**: v1.1 release
+**バージョン**: 2.0.0 (SSOT準拠版)
+**更新日**: 2026-02-23
+**作成者**: Claude Code
+**ドキュメント方針**: アーキテクチャと設計意図のみ記載、詳細はコードと設定ファイルを参照

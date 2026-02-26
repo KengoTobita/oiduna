@@ -18,10 +18,10 @@ sys.path.insert(0, str(root_dir / "packages" / "oiduna_core"))
 sys.path.insert(0, str(root_dir / "packages" / "osc_protocol"))
 
 import pytest
-from oiduna_core.models.environment import Environment
-from oiduna_core.models.sequence import Event, EventSequence
-from oiduna_core.models.session import CompiledSession
-from oiduna_core.models.track import FxParams, Track, TrackMeta, TrackParams
+from oiduna_core.ir.environment import Environment
+from oiduna_core.ir.sequence import Event, EventSequence
+from oiduna_core.ir.session import CompiledSession
+from oiduna_core.ir.track import FxParams, Track, TrackMeta, TrackParams
 
 from oiduna_loop.engine import LoopEngine
 from oiduna_loop.tests.mocks import MockCommandSource, MockMidiOutput, MockOscOutput, MockStateSink

@@ -15,7 +15,7 @@ import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import Mock, MagicMock, AsyncMock
 
-from oiduna_api.main import app
+from main import app
 
 
 @pytest.fixture
@@ -92,6 +92,7 @@ def mock_loop_service():
 
     # Playback commands always succeed in tests
     engine._handle_compile.return_value = CommandResult.ok()
+    engine._handle_session.return_value = CommandResult.ok()  # New session API
     engine._handle_play.return_value = CommandResult.ok()
     engine._handle_stop.return_value = CommandResult.ok()
     engine._handle_pause.return_value = CommandResult.ok()
@@ -113,7 +114,7 @@ def mock_loop_service():
 @pytest.fixture
 def client(mock_loop_service, monkeypatch):
     """Create a test client with mocked LoopService"""
-    from oiduna_api.services import loop_service
+    from services import loop_service
 
     # Replace global _loop_service with mock
     monkeypatch.setattr(loop_service, "_loop_service", mock_loop_service)
