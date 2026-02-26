@@ -22,57 +22,43 @@ Oiduna is a 256-step loop sequencer that receives pre-compiled patterns via HTTP
 
 ### Prerequisites
 
-- **SuperCollider** with **SuperDirt** installed
 - **Python 3.13+** with **uv** package manager
+- **SuperCollider** with **SuperDirt** (for audio output)
 
 ### Installation
 
 ```bash
+# Install Oiduna core
 cd /path/to/oiduna
-uv sync  # Install dependencies
+uv sync
+
+# Install SuperDirt extension (for audio output)
+cd ../oiduna-extension-superdirt
+uv pip install -e .
 ```
+
+### SuperDirt Setup
+
+For SuperDirt audio output, see the extension's documentation:
+
+**[→ SuperDirt Extension Setup Guide](../oiduna-extension-superdirt/README.md)**
+
+The extension provides:
+- Automated SuperCollider configuration scripts
+- SuperDirt startup scripts
+- Orbit management
+- Parameter conversion (snake_case → camelCase)
 
 ### Launch Oiduna
 
-Choose one of three methods:
-
-#### Method 1: Auto-Startup (Recommended)
-
-**One-time setup:**
 ```bash
-./scripts/setup_superdirt.sh
-```
-
-**Then start easily:**
-```bash
-# Terminal 1: SuperDirt (auto-configured)
-sclang
-
-# Terminal 2: Oiduna API
+# Terminal 1: Start Oiduna API
+cd oiduna
 uv run python -m oiduna_api.main
+
+# Terminal 2: Start SuperDirt (if using audio output)
+# See oiduna-extension-superdirt/README.md for setup
 ```
-
-#### Method 2: Script Startup
-
-```bash
-# Terminal 1: SuperDirt
-./scripts/start_superdirt.sh
-
-# Terminal 2: Oiduna API
-uv run python -m oiduna_api.main
-```
-
-#### Method 3: Unified Startup (tmux)
-
-```bash
-./scripts/start_all.sh  # Launches SuperDirt + Oiduna in tmux
-```
-
-**tmux controls:**
-- Switch windows: `Ctrl+b n` (next), `Ctrl+b p` (previous)
-- Detach: `Ctrl+b d`
-- Re-attach: `tmux attach -t oiduna`
-- Exit: `Ctrl+b :kill-session`
 
 ### Verify Installation
 
