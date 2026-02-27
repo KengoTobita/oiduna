@@ -131,7 +131,8 @@ oiduna/packages/
 ├── oiduna_api/          # FastAPI HTTPサーバー
 │   ├── routes/          # エンドポイント定義
 │   │   ├── playback.py  # /playback/session, /playback/start等
-│   │   └── tracks.py    # /tracks/{id}/mute, /tracks/{id}/solo
+│   │   ├── stream.py    # /stream (SSE)
+│   │   └── midi.py      # /midi/ports, /midi/port
 │   ├── models/          # Pydanticモデル（SessionRequest等）
 │   └── extensions/      # 拡張パイプライン
 │       ├── pipeline.py  # ExtensionPipeline実装
@@ -169,14 +170,6 @@ POST /playback/pause      # 一時停止（位置保持）
 POST /playback/bpm        # BPM変更
 GET  /playback/status     # 再生状態取得
 GET  /stream              # SSEリアルタイム配信
-```
-
-#### トラック制御
-```http
-POST   /tracks/{id}/mute    # Mute設定
-DELETE /tracks/{id}/mute    # Mute解除
-POST   /tracks/{id}/solo    # Solo設定
-DELETE /tracks/{id}/solo    # Solo解除
 ```
 
 #### その他
