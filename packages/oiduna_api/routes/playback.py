@@ -1,13 +1,15 @@
 """POST/GET /playback/* - Playback control endpoints"""
 
 import logging
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header
 from pydantic import BaseModel, Field
 
-from oiduna_api.dependencies import get_pipeline
+from oiduna_api.dependencies import get_pipeline, get_session_manager
 from oiduna_api.extensions import ExtensionPipeline, ExtensionError
 from oiduna_api.services.loop_service import LoopService, get_loop_service
+from oiduna_session import SessionManager, SessionCompiler
 
 logger = logging.getLogger(__name__)
 
@@ -182,3 +184,77 @@ async def set_bpm(
         raise HTTPException(status_code=500, detail=result.message)
 
     return {"status": "ok", "bpm": req.bpm}
+
+
+@router.post("/sync")
+async def sync_session_to_engine(
+    x_client_id: Annotated[str, Header()],
+    x_client_token: Annotated[str, Header()],
+    manager: SessionManager = Depends(get_session_manager),
+    loop_service: LoopService = Depends(get_loop_service),
+    pipeline: ExtensionPipeline = Depends(get_pipeline),
+) -> dict:
+    """
+    Sync session state to loop engine.
+
+    Compiles the current Session (tracks/patterns) into ScheduledMessageBatch
+    and loads it into the loop engine.
+
+    This endpoint should be called after:
+    - Creating/updating tracks
+    - Creating/updating patterns
+    - Changing pattern active state
+
+    Requires authentication.
+
+    Example:
+        POST /playback/sync
+        Headers:
+            X-Client-ID: alice_001
+            X-Client-Token: <token>
+
+        Response:
+        {
+            "status": "synced",
+            "message_count": 42,
+            "bpm": 120.0
+        }
+    """
+    # Verify authentication
+    client = manager.get_client(x_client_id)
+    if not client or client.token != x_client_token:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    # Compile session to batch
+    batch = SessionCompiler.compile(manager.session)
+
+    # Convert to payload format
+    payload = {
+        "messages": [msg.to_dict() for msg in batch.messages],
+        "bpm": batch.bpm,
+        "pattern_length": batch.pattern_length,
+    }
+
+    # Apply extension transformations
+    try:
+        payload = pipeline.apply(payload)
+        logger.debug(f"Extension pipeline applied: {len(pipeline.extensions)} extensions")
+    except ExtensionError as e:
+        logger.error(f"Extension error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    # Load into engine
+    engine = loop_service.get_engine()
+    result = engine._handle_session(payload)
+
+    if not result.success:
+        if "not loaded" in result.message:
+            raise HTTPException(status_code=503, detail=result.message)
+        else:
+            raise HTTPException(status_code=500, detail=result.message)
+
+    return {
+        "status": "synced",
+        "message_count": len(batch.messages),
+        "bpm": batch.bpm,
+    }
