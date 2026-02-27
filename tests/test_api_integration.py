@@ -13,8 +13,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "packages"))
 
 from oiduna_api.main import app
-from oiduna_api.dependencies import get_session_manager
-from oiduna_session import SessionManager
+from oiduna_api.dependencies import get_container
+from oiduna_session import SessionContainer
 from oiduna_destination.destination_models import OscDestinationConfig
 
 
@@ -26,9 +26,9 @@ def client():
 
 @pytest.fixture(autouse=True)
 def reset_session_manager():
-    """Reset session manager before each test."""
-    manager = get_session_manager()
-    manager.reset()
+    """Reset session container before each test."""
+    container = get_container()
+    container.reset()
 
     # Add a test destination
     dest = OscDestinationConfig(
@@ -38,12 +38,12 @@ def reset_session_manager():
         port=57120,
         address="/dirt/play"
     )
-    manager.add_destination(dest)
+    container.destinations.add(dest)
 
     yield
 
     # Cleanup
-    manager.reset()
+    container.reset()
 
 
 class TestClientAuth:

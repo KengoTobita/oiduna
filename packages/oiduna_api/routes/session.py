@@ -6,8 +6,8 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
-from oiduna_api.dependencies import get_session_manager
-from oiduna_session import SessionManager
+from oiduna_api.dependencies import get_container
+from oiduna_session import SessionContainer
 from oiduna_models import Session
 
 
@@ -30,7 +30,7 @@ class EnvironmentUpdateRequest(BaseModel):
 async def get_session_state(
     x_client_id: Annotated[str, Header()],
     x_client_token: Annotated[str, Header()],
-    manager: SessionManager = Depends(get_session_manager),
+    container: SessionContainer = Depends(get_container),
 ):
     """
     Get the complete current session state.
@@ -62,13 +62,13 @@ async def get_session_state(
         }
     """
     # Verify authentication
-    client = manager.get_client(x_client_id)
+    client = container.clients.get(x_client_id)
     if not client or client.token != x_client_token:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     # Return session state
     # Note: We should sanitize client tokens before returning
-    session = manager.get_state()
+    session = container.get_state()
 
     # Create a copy with sanitized tokens
     sanitized_clients = {
@@ -98,7 +98,7 @@ async def update_environment(
     req: EnvironmentUpdateRequest,
     x_client_id: Annotated[str, Header()],
     x_client_token: Annotated[str, Header()],
-    manager: SessionManager = Depends(get_session_manager),
+    container: SessionContainer = Depends(get_container),
 ):
     """
     Update environment settings (BPM, metadata).
@@ -125,12 +125,12 @@ async def update_environment(
         }
     """
     # Verify authentication
-    client = manager.get_client(x_client_id)
+    client = container.clients.get(x_client_id)
     if not client or client.token != x_client_token:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     # Update environment
-    env = manager.update_environment(
+    env = container.environment.update(
         bpm=req.bpm,
         metadata=req.metadata,
     )

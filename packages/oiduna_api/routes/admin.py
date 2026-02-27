@@ -8,9 +8,9 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
-from oiduna_api.dependencies import get_session_manager
+from oiduna_api.dependencies import get_container
 from oiduna_auth import verify_admin_password
-from oiduna_session import SessionManager, SessionValidator
+from oiduna_session import SessionContainer, SessionValidator
 from oiduna_destination.destination_models import DestinationConfig, OscDestinationConfig, MidiDestinationConfig
 
 
@@ -43,7 +43,7 @@ class SessionResetResponse(BaseModel):
 )
 async def list_destinations(
     _: None = Depends(verify_admin_password),
-    manager: SessionManager = Depends(get_session_manager),
+    container: SessionContainer = Depends(get_container),
 ):
     """
     List all configured destinations.
@@ -55,7 +55,7 @@ async def list_destinations(
         Headers:
             X-Admin-Password: <password>
     """
-    return DestinationResponse(destinations=manager.session.destinations)
+    return DestinationResponse(destinations=container.session.destinations)
 
 
 @router.post(
@@ -66,7 +66,7 @@ async def list_destinations(
 async def add_destination(
     destination: OscDestinationConfig | MidiDestinationConfig,
     _: None = Depends(verify_admin_password),
-    manager: SessionManager = Depends(get_session_manager),
+    container: SessionContainer = Depends(get_container),
 ):
     """
     Add a new destination to the session.
@@ -102,7 +102,7 @@ async def remove_destination(
     destination_id: str,
     force: bool = False,
     _: None = Depends(verify_admin_password),
-    manager: SessionManager = Depends(get_session_manager),
+    container: SessionContainer = Depends(get_container),
 ):
     """
     Remove a destination from the session.
@@ -119,7 +119,7 @@ async def remove_destination(
     """
     # Check if destination is in use
     validator = SessionValidator()
-    tracks_using = validator.check_destination_in_use(manager.session, destination_id)
+    tracks_using = validator.check_destination_in_use(container.session, destination_id)
 
     if tracks_using and not force:
         raise HTTPException(
@@ -141,7 +141,7 @@ async def force_delete_client(
     client_id: str,
     cascade: bool = True,
     _: None = Depends(verify_admin_password),
-    manager: SessionManager = Depends(get_session_manager),
+    container: SessionContainer = Depends(get_container),
 ):
     """
     Force disconnect a client (admin operation).
@@ -157,17 +157,17 @@ async def force_delete_client(
             X-Admin-Password: <password>
     """
     # Get client info before deleting
-    client = manager.get_client(client_id)
+    client = container.clients.get(client_id)
     if client is None:
         raise HTTPException(status_code=404, detail="Client not found")
 
     # Delete resources if cascade
     resources_deleted = {"tracks": 0, "patterns": 0}
     if cascade:
-        resources_deleted = manager.delete_client_resources(client_id)
+        resources_deleted = container.clients.delete_resources(client_id)
 
     # Delete client
-    success = manager.delete_client(client_id)
+    success = container.clients.delete(client_id)
 
     return ClientDeleteResponse(
         deleted=success,
@@ -183,7 +183,7 @@ async def force_delete_client(
 async def force_delete_track(
     track_id: str,
     _: None = Depends(verify_admin_password),
-    manager: SessionManager = Depends(get_session_manager),
+    container: SessionContainer = Depends(get_container),
 ):
     """
     Force delete a track (admin operation).
@@ -197,7 +197,7 @@ async def force_delete_track(
         Headers:
             X-Admin-Password: <password>
     """
-    success = manager.delete_track(track_id)
+    success = container.tracks.delete(track_id)
     if not success:
         raise HTTPException(status_code=404, detail="Track not found")
 
@@ -209,7 +209,7 @@ async def force_delete_track(
 )
 async def reset_session(
     _: None = Depends(verify_admin_password),
-    manager: SessionManager = Depends(get_session_manager),
+    container: SessionContainer = Depends(get_container),
 ):
     """
     Reset the entire session to empty state.
@@ -231,13 +231,13 @@ async def reset_session(
     """
     # Get counts before reset
     previous_counts = {
-        "clients": len(manager.session.clients),
-        "tracks": len(manager.session.tracks),
-        "destinations": len(manager.session.destinations),
+        "clients": len(container.session.clients),
+        "tracks": len(container.session.tracks),
+        "destinations": len(container.session.destinations),
     }
 
     # Reset session
-    manager.reset()
+    container.reset()
 
     return SessionResetResponse(
         message="Session reset complete",

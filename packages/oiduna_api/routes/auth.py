@@ -6,8 +6,8 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Header
 from pydantic import BaseModel, Field
 
-from oiduna_api.dependencies import get_session_manager
-from oiduna_session import SessionManager
+from oiduna_api.dependencies import get_container
+from oiduna_session import SessionContainer
 
 
 router = APIRouter()
@@ -51,7 +51,7 @@ class ClientInfoResponse(BaseModel):
 async def create_client(
     client_id: str,
     req: ClientCreateRequest,
-    manager: SessionManager = Depends(get_session_manager),
+    container: SessionContainer = Depends(get_container),
 ):
     """
     Register a new client and receive an authentication token.
@@ -77,7 +77,7 @@ async def create_client(
         }
     """
     try:
-        client = manager.create_client(
+        client = container.clients.create(
             client_id=client_id,
             client_name=req.client_name,
             distribution=req.distribution,
@@ -100,7 +100,7 @@ async def create_client(
     summary="List all connected clients"
 )
 async def list_clients(
-    manager: SessionManager = Depends(get_session_manager),
+    container: SessionContainer = Depends(get_container),
 ):
     """
     List all connected clients (without tokens).
@@ -118,7 +118,7 @@ async def list_clients(
             }
         ]
     """
-    clients = manager.list_clients()
+    clients = container.clients.list()
     return [
         ClientInfoResponse(
             client_id=c.client_id,
@@ -137,7 +137,7 @@ async def list_clients(
 )
 async def get_client(
     client_id: str,
-    manager: SessionManager = Depends(get_session_manager),
+    container: SessionContainer = Depends(get_container),
 ):
     """
     Get information about a specific client (without token).
@@ -153,7 +153,7 @@ async def get_client(
             "metadata": {}
         }
     """
-    client = manager.get_client(client_id)
+    client = container.clients.get(client_id)
     if client is None:
         raise HTTPException(status_code=404, detail="Client not found")
 
@@ -174,7 +174,7 @@ async def delete_client(
     client_id: str,
     x_client_id: Annotated[str, Header()],
     x_client_token: Annotated[str, Header()],
-    manager: SessionManager = Depends(get_session_manager),
+    container: SessionContainer = Depends(get_container),
 ):
     """
     Disconnect a client (self-delete only).
@@ -192,7 +192,7 @@ async def delete_client(
             X-Client-Token: <token>
     """
     # Verify authentication
-    client = manager.get_client(x_client_id)
+    client = container.clients.get(x_client_id)
     if not client or client.token != x_client_token:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
@@ -204,6 +204,6 @@ async def delete_client(
         )
 
     # Delete client
-    success = manager.delete_client(client_id)
+    success = container.clients.delete(client_id)
     if not success:
         raise HTTPException(status_code=404, detail="Client not found")

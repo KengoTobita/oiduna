@@ -6,8 +6,8 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
-from oiduna_api.dependencies import get_session_manager
-from oiduna_session import SessionManager, SessionValidator
+from oiduna_api.dependencies import get_container
+from oiduna_session import SessionContainer, SessionValidator
 from oiduna_models import Pattern, Event
 
 
@@ -32,10 +32,10 @@ class PatternUpdateRequest(BaseModel):
 async def verify_auth(
     x_client_id: str,
     x_client_token: str,
-    manager: SessionManager,
+    container: SessionContainer,
 ) -> str:
     """Verify client authentication and return client_id."""
-    client = manager.get_client(x_client_id)
+    client = container.clients.get(x_client_id)
     if not client or client.token != x_client_token:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     return x_client_id
@@ -51,7 +51,7 @@ async def list_patterns(
     track_id: str,
     x_client_id: Annotated[str, Header()],
     x_client_token: Annotated[str, Header()],
-    manager: SessionManager = Depends(get_session_manager),
+    container: SessionContainer = Depends(get_container),
 ):
     """
     List all patterns in a track.
@@ -62,9 +62,9 @@ async def list_patterns(
             X-Client-ID: alice_001
             X-Client-Token: <token>
     """
-    await verify_auth(x_client_id, x_client_token, manager)
+    await verify_auth(x_client_id, x_client_token, container)
 
-    patterns = manager.list_patterns(track_id)
+    patterns = container.patterns.list(track_id)
     if patterns is None:
         raise HTTPException(status_code=404, detail="Track not found")
 
@@ -81,7 +81,7 @@ async def get_pattern(
     pattern_id: str,
     x_client_id: Annotated[str, Header()],
     x_client_token: Annotated[str, Header()],
-    manager: SessionManager = Depends(get_session_manager),
+    container: SessionContainer = Depends(get_container),
 ):
     """
     Get detailed information about a pattern.
@@ -92,9 +92,9 @@ async def get_pattern(
             X-Client-ID: alice_001
             X-Client-Token: <token>
     """
-    await verify_auth(x_client_id, x_client_token, manager)
+    await verify_auth(x_client_id, x_client_token, container)
 
-    pattern = manager.get_pattern(track_id, pattern_id)
+    pattern = container.patterns.get(track_id, pattern_id)
     if pattern is None:
         raise HTTPException(status_code=404, detail="Pattern not found")
 
@@ -113,7 +113,7 @@ async def create_pattern(
     req: PatternCreateRequest,
     x_client_id: Annotated[str, Header()],
     x_client_token: Annotated[str, Header()],
-    manager: SessionManager = Depends(get_session_manager),
+    container: SessionContainer = Depends(get_container),
 ):
     """
     Create a new pattern in a track.
@@ -136,10 +136,10 @@ async def create_pattern(
             ]
         }
     """
-    client_id = await verify_auth(x_client_id, x_client_token, manager)
+    client_id = await verify_auth(x_client_id, x_client_token, container)
 
     try:
-        pattern = manager.create_pattern(
+        pattern = container.patterns.create(
             track_id=track_id,
             pattern_id=pattern_id,
             pattern_name=req.pattern_name,
@@ -165,7 +165,7 @@ async def update_pattern(
     req: PatternUpdateRequest,
     x_client_id: Annotated[str, Header()],
     x_client_token: Annotated[str, Header()],
-    manager: SessionManager = Depends(get_session_manager),
+    container: SessionContainer = Depends(get_container),
 ):
     """
     Update a pattern (active state and/or events).
@@ -183,18 +183,18 @@ async def update_pattern(
             "active": false
         }
     """
-    client_id = await verify_auth(x_client_id, x_client_token, manager)
+    client_id = await verify_auth(x_client_id, x_client_token, container)
 
     # Check track ownership (track owner can edit all patterns)
     validator = SessionValidator()
-    if not validator.check_track_ownership(manager.session, track_id, client_id):
+    if not validator.check_track_ownership(container.session, track_id, client_id):
         raise HTTPException(
             status_code=403,
             detail="Only track owner can edit patterns"
         )
 
     # Update pattern
-    pattern = manager.update_pattern(
+    pattern = container.patterns.update(
         track_id=track_id,
         pattern_id=pattern_id,
         active=req.active,
@@ -216,7 +216,7 @@ async def delete_pattern(
     pattern_id: str,
     x_client_id: Annotated[str, Header()],
     x_client_token: Annotated[str, Header()],
-    manager: SessionManager = Depends(get_session_manager),
+    container: SessionContainer = Depends(get_container),
 ):
     """
     Delete a pattern.
@@ -229,17 +229,17 @@ async def delete_pattern(
             X-Client-ID: alice_001
             X-Client-Token: <token>
     """
-    client_id = await verify_auth(x_client_id, x_client_token, manager)
+    client_id = await verify_auth(x_client_id, x_client_token, container)
 
     # Check track ownership
     validator = SessionValidator()
-    if not validator.check_track_ownership(manager.session, track_id, client_id):
+    if not validator.check_track_ownership(container.session, track_id, client_id):
         raise HTTPException(
             status_code=403,
             detail="Only track owner can delete patterns"
         )
 
     # Delete pattern
-    success = manager.delete_pattern(track_id, pattern_id)
+    success = container.patterns.delete(track_id, pattern_id)
     if not success:
         raise HTTPException(status_code=404, detail="Pattern not found")

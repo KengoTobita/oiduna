@@ -6,8 +6,8 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
-from oiduna_api.dependencies import get_session_manager
-from oiduna_session import SessionManager, SessionValidator
+from oiduna_api.dependencies import get_container
+from oiduna_session import SessionContainer, SessionValidator
 from oiduna_models import Track
 
 
@@ -37,10 +37,10 @@ class TrackUpdateRequest(BaseModel):
 async def verify_auth(
     x_client_id: str,
     x_client_token: str,
-    manager: SessionManager,
+    container: SessionContainer,
 ) -> str:
     """Verify client authentication and return client_id."""
-    client = manager.get_client(x_client_id)
+    client = container.clients.get(x_client_id)
     if not client or client.token != x_client_token:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     return x_client_id
@@ -55,7 +55,7 @@ async def verify_auth(
 async def list_tracks(
     x_client_id: Annotated[str, Header()],
     x_client_token: Annotated[str, Header()],
-    manager: SessionManager = Depends(get_session_manager),
+    container: SessionContainer = Depends(get_container),
 ):
     """
     List all tracks in the session.
@@ -66,8 +66,8 @@ async def list_tracks(
             X-Client-ID: alice_001
             X-Client-Token: <token>
     """
-    await verify_auth(x_client_id, x_client_token, manager)
-    return manager.list_tracks()
+    await verify_auth(x_client_id, x_client_token, container)
+    return container.tracks.list()
 
 
 @router.get(
@@ -79,7 +79,7 @@ async def get_track(
     track_id: str,
     x_client_id: Annotated[str, Header()],
     x_client_token: Annotated[str, Header()],
-    manager: SessionManager = Depends(get_session_manager),
+    container: SessionContainer = Depends(get_container),
 ):
     """
     Get detailed information about a track.
@@ -90,9 +90,9 @@ async def get_track(
             X-Client-ID: alice_001
             X-Client-Token: <token>
     """
-    await verify_auth(x_client_id, x_client_token, manager)
+    await verify_auth(x_client_id, x_client_token, container)
 
-    track = manager.get_track(track_id)
+    track = container.tracks.get(track_id)
     if track is None:
         raise HTTPException(status_code=404, detail="Track not found")
 
@@ -110,7 +110,7 @@ async def create_track(
     req: TrackCreateRequest,
     x_client_id: Annotated[str, Header()],
     x_client_token: Annotated[str, Header()],
-    manager: SessionManager = Depends(get_session_manager),
+    container: SessionContainer = Depends(get_container),
 ):
     """
     Create a new track.
@@ -129,10 +129,10 @@ async def create_track(
             "base_params": {"sound": "bd", "orbit": 0}
         }
     """
-    client_id = await verify_auth(x_client_id, x_client_token, manager)
+    client_id = await verify_auth(x_client_id, x_client_token, container)
 
     try:
-        track = manager.create_track(
+        track = container.tracks.create(
             track_id=track_id,
             track_name=req.track_name,
             destination_id=req.destination_id,
@@ -154,7 +154,7 @@ async def update_track(
     req: TrackUpdateRequest,
     x_client_id: Annotated[str, Header()],
     x_client_token: Annotated[str, Header()],
-    manager: SessionManager = Depends(get_session_manager),
+    container: SessionContainer = Depends(get_container),
 ):
     """
     Update track base parameters (shallow merge).
@@ -171,18 +171,18 @@ async def update_track(
             "base_params": {"gain": 0.8}
         }
     """
-    client_id = await verify_auth(x_client_id, x_client_token, manager)
+    client_id = await verify_auth(x_client_id, x_client_token, container)
 
     # Check ownership
     validator = SessionValidator()
-    if not validator.check_track_ownership(manager.session, track_id, client_id):
+    if not validator.check_track_ownership(container.session, track_id, client_id):
         raise HTTPException(
             status_code=403,
             detail="You don't own this track"
         )
 
     # Update track
-    track = manager.update_track_base_params(track_id, req.base_params)
+    track = container.tracks.update_base_params(track_id, req.base_params)
     if track is None:
         raise HTTPException(status_code=404, detail="Track not found")
 
@@ -198,7 +198,7 @@ async def delete_track(
     track_id: str,
     x_client_id: Annotated[str, Header()],
     x_client_token: Annotated[str, Header()],
-    manager: SessionManager = Depends(get_session_manager),
+    container: SessionContainer = Depends(get_container),
 ):
     """
     Delete a track (including all its patterns).
@@ -211,17 +211,17 @@ async def delete_track(
             X-Client-ID: alice_001
             X-Client-Token: <token>
     """
-    client_id = await verify_auth(x_client_id, x_client_token, manager)
+    client_id = await verify_auth(x_client_id, x_client_token, container)
 
     # Check ownership
     validator = SessionValidator()
-    if not validator.check_track_ownership(manager.session, track_id, client_id):
+    if not validator.check_track_ownership(container.session, track_id, client_id):
         raise HTTPException(
             status_code=403,
             detail="You don't own this track"
         )
 
     # Delete track
-    success = manager.delete_track(track_id)
+    success = container.tracks.delete(track_id)
     if not success:
         raise HTTPException(status_code=404, detail="Track not found")

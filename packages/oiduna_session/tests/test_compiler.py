@@ -3,15 +3,15 @@ Unit tests for SessionCompiler.
 """
 
 import pytest
-from oiduna_session import SessionCompiler, SessionManager
+from oiduna_session import SessionCompiler, SessionContainer
 from oiduna_models import Event
 from oiduna_destination.destination_models import OscDestinationConfig
 
 
 @pytest.fixture
-def manager():
-    """Create manager with test data."""
-    manager = SessionManager()
+def container():
+    """Create container with test data."""
+    container = SessionContainer()
 
     # Add destination
     dest = OscDestinationConfig(
@@ -21,13 +21,13 @@ def manager():
         port=57120,
         address="/dirt/play"
     )
-    manager.add_destination(dest)
+    container.destinations.add(dest)
 
     # Add client
-    manager.create_client("client_001", "Alice", "mars")
+    container.clients.create("client_001", "Alice", "mars")
 
     # Add track with base params
-    manager.create_track(
+    container.tracks.create(
         track_id="track_001",
         track_name="kick",
         destination_id="superdirt",
@@ -40,7 +40,7 @@ def manager():
         Event(step=0, cycle=0.0, params={}),
         Event(step=64, cycle=1.0, params={"gain": 0.9}),
     ]
-    manager.create_pattern(
+    container.patterns.create(
         track_id="track_001",
         pattern_id="pattern_001",
         pattern_name="main",
@@ -49,7 +49,7 @@ def manager():
         events=events
     )
 
-    return manager
+    return container
 
 
 class TestSessionCompiler:
@@ -57,14 +57,14 @@ class TestSessionCompiler:
 
     def test_compile_empty_session(self):
         """Test compiling empty session."""
-        manager = SessionManager()
-        batch = SessionCompiler.compile(manager.session)
+        container = SessionContainer()
+        batch = SessionCompiler.compile(container.session)
         assert len(batch.messages) == 0
         assert batch.bpm == 120.0
 
-    def test_compile_with_active_pattern(self, manager):
+    def test_compile_with_active_pattern(self, container):
         """Test compiling session with active pattern."""
-        batch = SessionCompiler.compile(manager.session)
+        batch = SessionCompiler.compile(container.session)
         assert len(batch.messages) == 2
         assert batch.bpm == 120.0
 
@@ -84,25 +84,25 @@ class TestSessionCompiler:
         assert msg.params["gain"] == 0.9
         assert msg.params["sound"] == "bd"  # Base param
 
-    def test_compile_with_inactive_pattern(self, manager):
+    def test_compile_with_inactive_pattern(self, container):
         """Test inactive patterns are skipped."""
         # Set pattern inactive
-        manager.update_pattern("track_001", "pattern_001", active=False)
+        container.patterns.update("track_001", "pattern_001", active=False)
 
-        batch = SessionCompiler.compile(manager.session)
+        batch = SessionCompiler.compile(container.session)
         assert len(batch.messages) == 0
 
-    def test_compile_multiple_tracks(self, manager):
+    def test_compile_multiple_tracks(self, container):
         """Test compiling multiple tracks."""
         # Add second track
-        manager.create_track(
+        container.tracks.create(
             track_id="track_002",
             track_name="snare",
             destination_id="superdirt",
             client_id="client_001",
             base_params={"sound": "sd"}
         )
-        manager.create_pattern(
+        container.patterns.create(
             track_id="track_002",
             pattern_id="pattern_002",
             pattern_name="main",
@@ -111,12 +111,12 @@ class TestSessionCompiler:
             events=[Event(step=128, cycle=2.0, params={})]
         )
 
-        batch = SessionCompiler.compile(manager.session)
+        batch = SessionCompiler.compile(container.session)
         assert len(batch.messages) == 3  # 2 from track_001 + 1 from track_002
 
-    def test_compile_track(self, manager):
+    def test_compile_track(self, container):
         """Test compiling a single track."""
-        messages = SessionCompiler.compile_track(manager.session, "track_001")
+        messages = SessionCompiler.compile_track(container.session, "track_001")
         assert len(messages) == 2
 
         msg = messages[0]
@@ -124,15 +124,15 @@ class TestSessionCompiler:
         assert msg.params["sound"] == "bd"
         assert msg.params["track_id"] == "track_001"
 
-    def test_compile_track_not_found(self, manager):
+    def test_compile_track_not_found(self, container):
         """Test compiling nonexistent track."""
         with pytest.raises(KeyError):
-            SessionCompiler.compile_track(manager.session, "invalid")
+            SessionCompiler.compile_track(container.session, "invalid")
 
-    def test_param_merging(self, manager):
+    def test_param_merging(self, container):
         """Test base_params and event params merging."""
         # Event params should override base params
-        batch = SessionCompiler.compile(manager.session)
+        batch = SessionCompiler.compile(container.session)
         msg = batch.messages[1]  # Second event has gain param
 
         assert msg.params["sound"] == "bd"  # From base_params

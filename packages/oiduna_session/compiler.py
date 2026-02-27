@@ -5,8 +5,13 @@ Extracts active patterns, merges parameters, and generates
 the message batch for the Loop Engine.
 """
 
+from typing import TYPE_CHECKING
+
 from oiduna_models import Session
 from oiduna_scheduler.scheduler_models import ScheduledMessage, ScheduledMessageBatch
+
+if TYPE_CHECKING:
+    from oiduna_models import Track, Event
 
 
 class SessionCompiler:
@@ -30,6 +35,37 @@ class SessionCompiler:
         >>> len(batch.messages)
         42
     """
+
+    @staticmethod
+    def _create_message_from_event(
+        track: "Track", event: "Event"
+    ) -> ScheduledMessage:
+        """
+        Create a ScheduledMessage from a Track and Event.
+
+        Merges Track.base_params with Event.params (event params override),
+        adds track_id for mute/solo filtering.
+
+        Args:
+            track: Track containing the event
+            event: Event to convert to message
+
+        Returns:
+            ScheduledMessage ready for Loop Engine
+        """
+        # Merge base_params with event params (event params override)
+        params = {**track.base_params, **event.params}
+
+        # Add track_id for mute/solo filtering
+        params["track_id"] = track.track_id
+
+        # Create scheduled message
+        return ScheduledMessage(
+            destination_id=track.destination_id,
+            cycle=event.cycle,
+            step=event.step,
+            params=params,
+        )
 
     @staticmethod
     def compile(session: Session) -> ScheduledMessageBatch:
@@ -59,19 +95,7 @@ class SessionCompiler:
 
                 # Generate messages for each event
                 for event in pattern.events:
-                    # Merge base_params with event params (event params override)
-                    params = {**track.base_params, **event.params}
-
-                    # Add track_id for mute/solo filtering
-                    params["track_id"] = track.track_id
-
-                    # Create scheduled message
-                    msg = ScheduledMessage(
-                        destination_id=track.destination_id,
-                        cycle=event.cycle,
-                        step=event.step,
-                        params=params,
-                    )
+                    msg = SessionCompiler._create_message_from_event(track, event)
                     messages.append(msg)
 
         return ScheduledMessageBatch(
@@ -103,15 +127,7 @@ class SessionCompiler:
                 continue
 
             for event in pattern.events:
-                params = {**track.base_params, **event.params}
-                params["track_id"] = track.track_id
-
-                msg = ScheduledMessage(
-                    destination_id=track.destination_id,
-                    cycle=event.cycle,
-                    step=event.step,
-                    params=params,
-                )
+                msg = SessionCompiler._create_message_from_event(track, event)
                 messages.append(msg)
 
         return messages

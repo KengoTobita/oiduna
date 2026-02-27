@@ -6,10 +6,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Header
 from pydantic import BaseModel, Field
 
-from oiduna_api.dependencies import get_pipeline, get_session_manager
+from oiduna_api.dependencies import get_pipeline, get_container
 from oiduna_api.extensions import ExtensionPipeline, ExtensionError
 from oiduna_api.services.loop_service import LoopService, get_loop_service
-from oiduna_session import SessionManager, SessionCompiler
+from oiduna_session import SessionContainer, SessionCompiler
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +190,7 @@ async def set_bpm(
 async def sync_session_to_engine(
     x_client_id: Annotated[str, Header()],
     x_client_token: Annotated[str, Header()],
-    manager: SessionManager = Depends(get_session_manager),
+    container: SessionContainer = Depends(get_container),
     loop_service: LoopService = Depends(get_loop_service),
     pipeline: ExtensionPipeline = Depends(get_pipeline),
 ) -> dict:
@@ -221,12 +221,12 @@ async def sync_session_to_engine(
         }
     """
     # Verify authentication
-    client = manager.get_client(x_client_id)
+    client = container.clients.get(x_client_id)
     if not client or client.token != x_client_token:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     # Compile session to batch
-    batch = SessionCompiler.compile(manager.session)
+    batch = SessionCompiler.compile(container.session)
 
     # Convert to payload format
     payload = {
