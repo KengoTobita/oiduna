@@ -9,20 +9,13 @@ from __future__ import annotations
 import time
 
 import pytest
-from oiduna_core.ir.track_midi import TrackMidi
 
 from ..engine.note_scheduler import NoteScheduler
 from .mocks import MockMidiOutput
 
 
-@pytest.fixture
-def sample_midi_track() -> TrackMidi:
-    """Create a sample TrackMidi for testing."""
-    return TrackMidi(
-        track_id="synth",
-        channel=5,
-        velocity=100,
-    )
+# Test MIDI channel (0-15)
+TEST_CHANNEL = 5
 
 
 class TestNoteSchedulerBasics:
@@ -35,26 +28,24 @@ class TestNoteSchedulerBasics:
         assert scheduler.pending_count == 0
 
     def test_schedule_note_sends_note_on(
-        self, mock_midi: MockMidiOutput, sample_midi_track: TrackMidi
-    ):
+        self, mock_midi: MockMidiOutput    ):
         """Scheduling a note should send note-on immediately."""
         scheduler = NoteScheduler(mock_midi)
 
         scheduler.schedule_note_on_channel(
-            sample_midi_track.channel, 60, 100, step_duration=0.125
+            TEST_CHANNEL, 60, 100, step_duration=0.125
         )
 
         assert len(mock_midi.notes) == 1
-        assert mock_midi.notes[0] == ("on", sample_midi_track.channel, 60, 100)
+        assert mock_midi.notes[0] == ("on", TEST_CHANNEL, 60, 100)
 
     def test_schedule_note_queues_note_off(
-        self, mock_midi: MockMidiOutput, sample_midi_track: TrackMidi
-    ):
+        self, mock_midi: MockMidiOutput    ):
         """Scheduling a note should queue a note-off."""
         scheduler = NoteScheduler(mock_midi)
 
         scheduler.schedule_note_on_channel(
-            sample_midi_track.channel, 60, 100, step_duration=0.125
+            TEST_CHANNEL, 60, 100, step_duration=0.125
         )
 
         assert scheduler.pending_count == 1
@@ -64,14 +55,13 @@ class TestNoteSchedulerNoteOff:
     """Test note-off processing."""
 
     def test_process_pending_note_offs_immediate(
-        self, mock_midi: MockMidiOutput, sample_midi_track: TrackMidi
-    ):
+        self, mock_midi: MockMidiOutput    ):
         """Note-off should be sent when time has elapsed."""
         scheduler = NoteScheduler(mock_midi)
 
         # Schedule with very short duration
         scheduler.schedule_note_on_channel(
-            sample_midi_track.channel, 60, 100, step_duration=0.001, gate=0.001
+            TEST_CHANNEL, 60, 100, step_duration=0.001, gate=0.001
         )
 
         # Wait for note-off time
@@ -80,17 +70,16 @@ class TestNoteSchedulerNoteOff:
 
         # Should have note-on and note-off
         assert len(mock_midi.notes) >= 2
-        assert mock_midi.notes[-1][:2] == ("off", sample_midi_track.channel)
+        assert mock_midi.notes[-1][:2] == ("off", TEST_CHANNEL)
 
     def test_process_pending_not_due(
-        self, mock_midi: MockMidiOutput, sample_midi_track: TrackMidi
-    ):
+        self, mock_midi: MockMidiOutput    ):
         """Note-off should not be sent before time."""
         scheduler = NoteScheduler(mock_midi)
 
         # Schedule with long duration
         scheduler.schedule_note_on_channel(
-            sample_midi_track.channel, 60, 100, step_duration=1.0, gate=1.0
+            TEST_CHANNEL, 60, 100, step_duration=1.0, gate=1.0
         )
 
         # Process immediately (before note-off time)
@@ -101,16 +90,15 @@ class TestNoteSchedulerNoteOff:
         assert mock_midi.notes[0][0] == "on"
 
     def test_clear_all(
-        self, mock_midi: MockMidiOutput, sample_midi_track: TrackMidi
-    ):
+        self, mock_midi: MockMidiOutput    ):
         """clear_all should clear pending notes and send all-notes-off."""
         scheduler = NoteScheduler(mock_midi)
 
         scheduler.schedule_note_on_channel(
-            sample_midi_track.channel, 60, 100, step_duration=1.0
+            TEST_CHANNEL, 60, 100, step_duration=1.0
         )
         scheduler.schedule_note_on_channel(
-            sample_midi_track.channel, 64, 100, step_duration=1.0
+            TEST_CHANNEL, 64, 100, step_duration=1.0
         )
         assert scheduler.pending_count == 2
 
@@ -123,28 +111,26 @@ class TestNoteSchedulerConnection:
     """Test connection handling."""
 
     def test_no_send_when_disconnected(
-        self, mock_midi: MockMidiOutput, sample_midi_track: TrackMidi
-    ):
+        self, mock_midi: MockMidiOutput    ):
         """Should not send notes when MIDI is disconnected."""
         mock_midi._connected = False
         scheduler = NoteScheduler(mock_midi)
 
         scheduler.schedule_note_on_channel(
-            sample_midi_track.channel, 60, 100, step_duration=0.125
+            TEST_CHANNEL, 60, 100, step_duration=0.125
         )
 
         assert len(mock_midi.notes) == 0
         assert scheduler.pending_count == 0
 
     def test_no_process_when_disconnected(
-        self, mock_midi: MockMidiOutput, sample_midi_track: TrackMidi
-    ):
+        self, mock_midi: MockMidiOutput    ):
         """Should not process note-offs when disconnected."""
         scheduler = NoteScheduler(mock_midi)
 
         # Schedule note while connected
         scheduler.schedule_note_on_channel(
-            sample_midi_track.channel, 60, 100, step_duration=0.001, gate=0.001
+            TEST_CHANNEL, 60, 100, step_duration=0.001, gate=0.001
         )
         time.sleep(0.01)
 
@@ -161,14 +147,13 @@ class TestNoteSchedulerGate:
     """Test gate length handling."""
 
     def test_gate_affects_duration(
-        self, mock_midi: MockMidiOutput, sample_midi_track: TrackMidi
-    ):
+        self, mock_midi: MockMidiOutput    ):
         """Gate parameter should affect note-off timing."""
         scheduler = NoteScheduler(mock_midi)
 
         # Schedule with half gate
         scheduler.schedule_note_on_channel(
-            sample_midi_track.channel, 60, 100, step_duration=0.1, gate=0.5
+            TEST_CHANNEL, 60, 100, step_duration=0.1, gate=0.5
         )
 
         # Note-off time should be: step_duration * gate * 4 = 0.1 * 0.5 * 4 = 0.2s

@@ -72,9 +72,11 @@ class OscDestinationSender:
         Args:
             messages: List of parameter dictionaries
 
-        TODO: Implement OSC bundle support with timing
+        Note: OSC bundle with timestamp not yet implemented.
+        Would improve timing accuracy for simultaneous messages.
+        For now, messages are sent individually (slight timing variance).
         """
-        # For now, send individually
+        # TODO: Implement bundle with pythonosc.osc_bundle_builder
         for msg in messages:
             self.send_message(msg)
 
@@ -152,9 +154,8 @@ class MidiDestinationSender:
                 channel=channel
             ))
 
-            # TODO: Schedule note off after duration_ms
-            # For now, rely on external note-off scheduling
-            # This requires integration with the loop engine's timing
+            # Note: Note-off scheduling is handled by NoteScheduler in loop engine
+            # See: oiduna_loop/engine/note_scheduler.py
 
         # CC message
         elif "cc" in params:

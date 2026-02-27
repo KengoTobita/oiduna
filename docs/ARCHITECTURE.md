@@ -72,12 +72,12 @@
 │ MARS DSL Compiler                                           │
 │   ├─ Larkパーサー (DSL → AST)                               │
 │   ├─ RuntimeSession生成 (mars_dsl)                          │
-│   └─ CompiledSession変換 (oiduna_core)                     │
-│     ↓ HTTP POST /playback/pattern (JSON)                    │
+│   └─ ScheduledMessageBatch変換                             │
+│     ↓ HTTP POST /playback/session (JSON)                    │
 ├─────────────────────────────────────────────────────────────┤
 │ Oiduna Loop Engine                                          │
-│   ├─ CompiledSessionデシリアライズ                          │
-│   ├─ EventSequence構築（ステップインデックス作成）          │
+│   ├─ ScheduledMessageBatchデシリアライズ                    │
+│   ├─ MessageScheduler インデックス化（O(1)ルックアップ）    │
 │   └─ ループ再生                                             │
 │     ├─ OSCメッセージ → SuperCollider → サウンド再生         │
 │     └─ MIDIメッセージ → MIDIデバイス → サウンド再生         │
@@ -91,49 +91,43 @@
 - **HTTP通信**: 任意のフロントエンドから制御可能
 - **JSON形式**: 言語非依存、デバッグ容易
 
-### 2.2 3層IR（中間表現）アーキテクチャ
+### 2.2 ScheduledMessageBatchアーキテクチャ
 
 ```
 ┌───────────────────────────────────────────────────────────┐
-│ CompiledSession                                           │
+│ ScheduledMessageBatch                                     │
 │                                                           │
-│  ┌─────────────────────────────────────────────────────┐  │
-│  │ Layer 1: Environment（演奏環境）                     │  │
-│  │  - BPM、スケール、スウィング                         │  │
-│  │  - コード進行（オプション）                          │  │
-│  └─────────────────────────────────────────────────────┘  │
+│  messages: tuple[ScheduledMessage, ...]                   │
+│    ├─ destination_id: str  (例: "superdirt", "volca")    │
+│    ├─ cycle: float         (サイクル位置: 0.0-4.0)       │
+│    ├─ step: int            (ステップ番号: 0-255)         │
+│    └─ params: dict[str, Any]  (送信先依存パラメータ)     │
 │                                                           │
-│  ┌─────────────────────────────────────────────────────┐  │
-│  │ Layer 2: Track Configuration（トラック設定）         │  │
-│  │  - Track: サウンドパラメータ、エフェクト             │  │
-│  │  - TrackMidi: MIDIチャンネル、トランスポーズ         │  │
-│  │  - MixerLine: バス/グループ、空間エフェクト          │  │
-│  └─────────────────────────────────────────────────────┘  │
-│                                                           │
-│  ┌─────────────────────────────────────────────────────┐  │
-│  │ Layer 3: Pattern Data（パターンデータ）              │  │
-│  │  - EventSequence: ステップインデックス付きイベント   │  │
-│  │  - Event: トリガータイミング、ノート、ベロシティ     │  │
-│  └─────────────────────────────────────────────────────┘  │
+│  bpm: float                (テンポ: 120.0)                │
+│  pattern_length: float     (パターン長: 4.0サイクル)      │
 └───────────────────────────────────────────────────────────┘
+        ↓
+MessageScheduler (oiduna_scheduler)
+  ├─ ステップ別インデックス構築 (dict[int, list[int]])
+  └─ O(1)高速ルックアップ
 ```
 
-**なぜ3層に分離するのか**:
+**なぜフラット構造なのか**:
 
-1. **音色とパターンの独立性**
-   - 同じパターンを異なる音色で演奏可能
-   - パターンを変更せずに音色だけ調整可能
+1. **Destination-Agnostic（送信先非依存）**
+   - SuperDirt、MIDI、カスタム送信先を統一的に扱える
+   - 拡張機能で新しい送信先を追加可能
 
-2. **段階的なコンパイル**
-   - DSL → Layer 1, 2, 3の順に構築
-   - 各層を独立してテスト可能
+2. **シンプルさ**
+   - 階層構造を持たず、フラットなメッセージリスト
+   - デバッグと理解が容易
 
 3. **効率的なリアルタイム処理**
-   - Layer 3のEventSequenceはステップインデックス（dict[int, list[int]]）を持つ
-   - O(1)で特定ステップのイベント検索が可能
+   - MessageSchedulerがステップ別インデックスを構築
+   - O(1)で特定ステップのメッセージ検索が可能
    - リアルタイム再生時の高速検索を実現
 
-詳細: [データモデルリファレンス](03_データモデルリファレンス.md)
+詳細: `packages/oiduna_scheduler/scheduler_models.py`
 
 ### 2.3 コンポーネント構成
 
@@ -172,28 +166,25 @@
 - **oiduna_loop**: リアルタイム再生エンジン
 - **oiduna_api**: 再生制御、トラック管理、HTTP API
 
-### 2.4 MARSとOidunaのモデル分離
+### 2.4 MARSとOidunaのデータ交換
 
-MARS DSL (mars_dsl) と Oiduna Core (oiduna_core) は別々のデータモデルを持ちます。
+MARS DSL (mars_dsl) と Oiduna (oiduna_scheduler) は共通のScheduledMessageBatch形式でデータを交換します。
 
-**mars_dsl (Runtime表現)**:
-- DSLコンパイラの出力
-- 後方互換性を重視
-- 例: `sound`フィールド、キャメルケースエフェクト名
+**MARSの役割**:
+- DSLコンパイラの出力をScheduledMessageBatchに変換
+- 高レベルな構造（Track、Environment等）からフラットなメッセージリストへの変換
 
-**oiduna_core (Compiled表現)**:
-- ループエンジンの入力
-- パフォーマンス最適化を重視
-- 例: `params`フィールド、スネークケースエフェクト名
+**Oidunaの役割**:
+- ScheduledMessageBatchをループエンジンで再生
+- MessageSchedulerによるインデックス化
+- DestinationRouterによる送信先別振り分け
 
-**なぜ分離するのか**:
-- **責任の分離**: DSLの進化とエンジンの最適化を独立して行える
-- **互換性**: MARSのRuntime表現は後方互換性を維持、Oidunaは最適化のために変更可能
+**なぜこの形式なのか**:
+- **送信先非依存**: params: dict[str, Any]により任意の送信先に対応
 - **柔軟性**: MARS以外のDSLやフロントエンドもOidunaを使用できる
+- **拡張性**: ExtensionPipelineによるメッセージ変換が可能
 
-**変換**: `mars_compiler/model_converter.py`で自動的に行われます。
-
-詳細: [データモデルリファレンス](03_データモデルリファレンス.md#4-モデル間の関係)
+詳細: `packages/oiduna_scheduler/scheduler_models.py`
 
 ---
 
@@ -259,25 +250,34 @@ Oiduna APIはSSEでリアルタイム状態を配信します。
 2. MARS API内部
    ├─ DSL → Larkパーサー
    ├─ AST → RuntimeSession
-   └─ RuntimeSession → CompiledSession
+   └─ RuntimeSession → ScheduledMessageBatch
 
 3. MARS API → Oiduna API
-   POST /playback/pattern
-   Body: CompiledSession JSON
+   POST /playback/session
+   Body: ScheduledMessageBatch JSON
+   {
+     "messages": [
+       {"destination_id": "superdirt", "step": 0, "params": {...}},
+       ...
+     ],
+     "bpm": 120.0,
+     "pattern_length": 4.0
+   }
 
 4. Oiduna API内部
-   ├─ JSON → CompiledSessionデシリアライズ
-   ├─ EventSequence構築（ステップインデックス作成）
+   ├─ JSON → ScheduledMessageBatchデシリアライズ
+   ├─ MessageScheduler インデックス化（ステップ別dict作成）
    └─ ループエンジンに適用
 
 5. ループ再生開始
-   ├─ OSCメッセージ → SuperCollider
-   └─ MIDIメッセージ → MIDIデバイス
+   ├─ DestinationRouter → OSC送信 → SuperCollider
+   └─ DestinationRouter → MIDI送信 → MIDIデバイス
 ```
 
 **重要なポイント**:
 - **ステップ2とステップ3の分離**: DSLコンパイルとループエンジンが独立
-- **ステップ4のEventSequence構築**: リアルタイム再生のための高速検索インデックス作成
+- **ステップ4のMessageScheduler**: リアルタイム再生のための高速検索インデックス作成
+- **ステップ5のDestinationRouter**: 送信先別の自動振り分け
 
 ### 4.2 プロジェクト管理フロー
 
@@ -369,9 +369,9 @@ cd Modular_Audio_Real-time_Scripting && uv run mypy apps packages
 
 ## 関連ドキュメント
 
-- [現状分析](01_現状分析.md) - 実装状況とテスト状況
-- [問題点と改善提案](02_問題点と改善提案.md) - 改善アクションと優先順位
-- [データモデルリファレンス](03_データモデルリファレンス.md) - データモデル設計と参照
+- [MIGRATION_GUIDE_SCHEDULED_MESSAGE_BATCH.md](MIGRATION_GUIDE_SCHEDULED_MESSAGE_BATCH.md) - アーキテクチャ統合マイグレーションガイド
+- [ARCHITECTURE_UNIFICATION_COMPLETE.md](ARCHITECTURE_UNIFICATION_COMPLETE.md) - アーキテクチャ統合完了記録
+- [DATA_MODEL_REFERENCE.md](DATA_MODEL_REFERENCE.md) - データモデル設計と参照
 - [ADR一覧](knowledge/adr/) - 重要な設計判断の記録
 
 ---

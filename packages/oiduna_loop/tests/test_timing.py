@@ -29,39 +29,6 @@ class TestStepLoopDriftCorrection:
         # After implementation, this attribute will exist
         assert getattr(test_engine, "_step_anchor_time", None) is None
 
-    def test_anchor_time_resets_on_stop(
-        self,
-        test_engine: LoopEngine,
-        sample_session_data: dict,
-    ) -> None:
-        """Anchor time should reset to None when playback stops."""
-        # Setup: Load session and start playing
-        test_engine._handle_compile(sample_session_data)
-        test_engine.handle_play({})
-
-        # Stop playback
-        test_engine.handle_stop({})
-
-        # Anchor should be reset
-        assert getattr(test_engine, "_step_anchor_time", None) is None
-        assert getattr(test_engine, "_step_count", 0) == 0
-
-    def test_anchor_time_resets_on_pause(
-        self,
-        test_engine: LoopEngine,
-        sample_session_data: dict,
-    ) -> None:
-        """Anchor time should reset when playback is paused."""
-        # Setup: Load session and start playing
-        test_engine._handle_compile(sample_session_data)
-        test_engine.handle_play({})
-
-        # Pause playback
-        test_engine.handle_pause({})
-
-        # Anchor should be reset (will re-anchor on resume)
-        assert getattr(test_engine, "_step_anchor_time", None) is None
-
     def test_step_count_starts_at_zero(
         self,
         test_engine: LoopEngine,

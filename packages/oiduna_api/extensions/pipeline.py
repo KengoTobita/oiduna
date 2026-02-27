@@ -155,7 +155,8 @@ def discover_extensions() -> ExtensionPipeline:
                 continue
 
             # Instantiate with default config
-            # TODO: Load config from extensions.yaml if it exists
+            # TODO: Support extension configuration via extensions.yaml
+            # Would allow customization without code changes
             instance = cls()
             pipeline.register(ep.name, instance)
 

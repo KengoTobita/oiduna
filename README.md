@@ -13,7 +13,7 @@ Oiduna is a 256-step loop sequencer that receives pre-compiled patterns via HTTP
 - 🔊 **SuperDirt integration** - OSC output to SuperCollider
 - 🎹 **MIDI output** - Hardware synth support
 - 📡 **Server-Sent Events (SSE)** - Real-time state streaming
-- 🎛️ **Mixer & effects** - Built-in routing and spatial effects
+- 🎛️ **Effects support** - Via SuperDirt and extension plugins
 - 🔄 **O(1) event lookup** - Optimized for real-time performance
 
 ---

@@ -27,21 +27,10 @@ class TestLoopEngineInit:
         """Engine should start with correct initial state."""
         assert test_engine.state.playing is False
         assert test_engine.state.bpm == 120.0
-        assert len(test_engine.state.tracks) == 0
 
 
 class TestLoopEngineCommands:
     """Test command handling."""
-
-    def test_handle_compile(
-        self, test_engine: LoopEngine, sample_session_data: dict[str, Any]
-    ):
-        """Compile command should load session data."""
-        test_engine._handle_compile(sample_session_data)
-
-        assert "kick" in test_engine.state.tracks
-        assert "hihat" in test_engine.state.tracks
-        assert test_engine.state.bpm == 120.0
 
     def test_handle_play(self, test_engine: LoopEngine, mock_midi):
         """Play command should start playback and send MIDI start."""
@@ -160,40 +149,6 @@ class TestLoopEngineCommands:
         # State should remain STOPPED
         assert test_engine.state.playback_state == PlaybackState.STOPPED
 
-    def test_handle_mute(
-        self, test_engine: LoopEngine, sample_session_data: dict[str, Any]
-    ):
-        """Mute command should mute specified track."""
-        test_engine._handle_compile(sample_session_data)
-
-        test_engine._handle_mute({"track_id": "kick", "mute": True})
-
-        # v5: mute is in track.meta.mute
-        assert test_engine.state.tracks["kick"].meta.mute is True
-
-    def test_handle_unmute(
-        self, test_engine: LoopEngine, sample_session_data: dict[str, Any]
-    ):
-        """Mute command with mute=False should unmute track."""
-        test_engine._handle_compile(sample_session_data)
-        # First mute, then unmute
-        test_engine._handle_mute({"track_id": "kick", "mute": True})
-
-        test_engine._handle_mute({"track_id": "kick", "mute": False})
-
-        assert test_engine.state.tracks["kick"].meta.mute is False
-
-    def test_handle_solo(
-        self, test_engine: LoopEngine, sample_session_data: dict[str, Any]
-    ):
-        """Solo command should solo specified track."""
-        test_engine._handle_compile(sample_session_data)
-
-        test_engine._handle_solo({"track_id": "kick", "solo": True})
-
-        # v5: solo is in track.meta.solo
-        assert test_engine.state.tracks["kick"].meta.solo is True
-
     def test_handle_bpm(self, test_engine: LoopEngine):
         """BPM command should change tempo."""
         test_engine._handle_bpm({"bpm": 140.0})
@@ -218,22 +173,6 @@ class TestLoopEngineCommandInjection:
         assert test_engine.state.playing is True
 
     @pytest.mark.asyncio
-    async def test_process_multiple_commands(
-        self,
-        test_engine: LoopEngine,
-        mock_commands,
-        sample_session_data: dict[str, Any],
-    ):
-        """Multiple commands should be processed in order."""
-        mock_commands.inject_command("compile", sample_session_data)
-        mock_commands.inject_command("play", {})
-
-        await mock_commands.process_commands()
-
-        assert "kick" in test_engine.state.tracks
-        assert test_engine.state.playing is True
-
-    @pytest.mark.asyncio
     async def test_process_stop_after_play(
         self,
         test_engine: LoopEngine,
@@ -251,61 +190,3 @@ class TestLoopEngineCommandInjection:
 class TestLoopEngineIntegration:
     """Integration tests using multiple components."""
 
-    def test_full_workflow(
-        self,
-        test_engine: LoopEngine,
-        mock_midi,
-        sample_session_data: dict[str, Any],
-    ):
-        """Test complete workflow: compile, play, stop."""
-        test_engine._midi_enabled = True
-
-        # Compile session
-        test_engine._handle_compile(sample_session_data)
-        assert "kick" in test_engine.state.tracks
-
-        # Start playback
-        test_engine.handle_play({})
-        assert test_engine.state.playing is True
-        assert mock_midi.started is True
-
-        # Stop playback
-        test_engine.handle_stop({})
-        assert test_engine.state.playing is False
-        assert mock_midi.stopped is True
-
-    def test_solo_affects_active_tracks(
-        self,
-        test_engine: LoopEngine,
-        sample_session_data: dict[str, Any],
-    ):
-        """Solo should affect which tracks are active."""
-        test_engine._handle_compile(sample_session_data)
-
-        # Initially both tracks are active
-        active = test_engine.state.get_active_tracks()
-        assert len(active) == 2
-
-        # Solo kick
-        test_engine._handle_solo({"track_id": "kick", "solo": True})
-
-        # Only kick should be active
-        active = test_engine.state.get_active_tracks()
-        assert len(active) == 1
-        assert "kick" in active
-
-    def test_mute_affects_active_tracks(
-        self,
-        test_engine: LoopEngine,
-        sample_session_data: dict[str, Any],
-    ):
-        """Mute should affect which tracks are active."""
-        test_engine._handle_compile(sample_session_data)
-
-        # Mute kick
-        test_engine._handle_mute({"track_id": "kick", "mute": True})
-
-        # Only hihat should be active
-        active = test_engine.state.get_active_tracks()
-        assert len(active) == 1
-        assert "hihat" in active

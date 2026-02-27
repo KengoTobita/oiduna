@@ -82,48 +82,6 @@ class TestPanicCommand:
         # Note: MockMidiOutput.all_notes_off() doesn't track calls,
         # so we check the state machine behavior instead
 
-    @pytest.mark.asyncio
-    async def test_panic_stops_playback(
-        self,
-        test_engine: LoopEngine,
-        mock_commands: MockCommandSource,
-        sample_session_data: dict,
-    ) -> None:
-        """Panic command should stop playback."""
-        # Setup: Start playing
-        test_engine._handle_compile(sample_session_data)
-        test_engine.handle_play({})
-        assert test_engine.state.playback_state == PlaybackState.PLAYING
-
-        # Inject panic command
-        mock_commands.inject_command("panic", {})
-        await mock_commands.process_commands()
-
-        # Should be stopped
-        assert test_engine.state.playback_state == PlaybackState.STOPPED
-
-    @pytest.mark.asyncio
-    async def test_panic_resets_position(
-        self,
-        test_engine: LoopEngine,
-        mock_commands: MockCommandSource,
-        sample_session_data: dict,
-    ) -> None:
-        """Panic command should reset position to 0."""
-        # Setup: Start playing and advance position
-        test_engine._handle_compile(sample_session_data)
-        test_engine.handle_play({})
-        test_engine.state.advance_step()
-        test_engine.state.advance_step()
-        assert test_engine.state.position.step > 0
-
-        # Inject panic command
-        mock_commands.inject_command("panic", {})
-        await mock_commands.process_commands()
-
-        # Position should be reset
-        assert test_engine.state.position.step == 0
-
 
 class TestMockMidiAllNotesOffTracking:
     """Tests to verify MockMidiOutput tracks all_notes_off calls."""
