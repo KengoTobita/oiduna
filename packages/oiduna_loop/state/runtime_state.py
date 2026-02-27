@@ -213,19 +213,26 @@ class RuntimeState:
         """
         Filter messages based on mute/solo state.
 
-        Messages must have track_id in params dict.
-        Messages without track_id are passed through unchanged.
+        Messages without track_id in params are passed through unchanged.
+        Messages with unknown track_id are filtered out.
 
         Args:
             messages: List of ScheduledMessage to filter
 
         Returns:
-            Filtered list of messages (only active tracks)
+            Filtered list of messages (only active tracks + trackless messages)
         """
-        return [
-            msg for msg in messages
-            if self.is_track_active(msg.params.get("track_id", ""))
-        ]
+        filtered = []
+        for msg in messages:
+            track_id = msg.params.get("track_id")
+            if track_id is None:
+                # No track_id = always pass through
+                filtered.append(msg)
+            elif self.is_track_active(track_id):
+                # Has track_id and is active
+                filtered.append(msg)
+            # else: Has track_id but inactive = filter out
+        return filtered
 
     def get_active_track_ids(self) -> list[str]:
         """Get list of currently active track IDs"""

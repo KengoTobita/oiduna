@@ -1,14 +1,11 @@
-"""Tests for RuntimeState."""
+"""Tests for RuntimeState (ScheduledMessageBatch architecture)."""
 
-
-from oiduna_core.ir.environment import Environment
-from oiduna_core.ir.session import CompiledSession
-from oiduna_core.ir.track import Track, TrackMeta, TrackParams
 from oiduna_loop.state.runtime_state import (
     PlaybackState,
     Position,
     RuntimeState,
 )
+from oiduna_scheduler.scheduler_models import ScheduledMessage
 
 
 class TestPosition:
@@ -55,411 +52,396 @@ class TestPosition:
 
     def test_reset(self) -> None:
         """Test resetting position."""
-        pos = Position(step=100, bar=6, beat=2)
+        pos = Position(step=100, bar=5, beat=2)
         pos.reset()
         assert pos.step == 0
         assert pos.bar == 0
         assert pos.beat == 0
 
     def test_to_dict(self) -> None:
-        """Test converting to dict."""
-        pos = Position(step=16, bar=1, beat=0, timestamp=1234.5)
+        """Test converting position to dict."""
+        pos = Position(step=16, bar=1, beat=0)
         d = pos.to_dict()
         assert d["step"] == 16
         assert d["bar"] == 1
         assert d["beat"] == 0
-        assert d["timestamp"] == 1234.5
+        assert "timestamp" in d
 
 
 class TestRuntimeStateBasics:
-    """Test RuntimeState basic functionality."""
+    """Test basic RuntimeState functionality."""
 
-    def test_default_state(self) -> None:
+    def test_default_values(self) -> None:
         """Test default state values."""
         state = RuntimeState()
         assert state.playback_state == PlaybackState.STOPPED
-        assert state.playing is False
+        assert state.position.step == 0
         assert state.bpm == 120.0
-        assert state.loop_steps == 256
+        assert state.step_duration > 0
+        assert state.cps > 0
 
     def test_playing_property(self) -> None:
-        """Test playing property getter/setter."""
+        """Test playing property."""
         state = RuntimeState()
-        assert state.playing is False
+        assert not state.playing
 
         state.playing = True
-        assert state.playing is True
         assert state.playback_state == PlaybackState.PLAYING
+        assert state.playing
 
         state.playing = False
-        assert state.playing is False
         assert state.playback_state == PlaybackState.PAUSED
 
-    def test_get_effective_empty(self) -> None:
-        """Test get_effective with no state."""
-        state = RuntimeState()
-        eff = state.get_effective()
-        assert isinstance(eff, CompiledSession)
-        assert eff.environment.bpm == 120.0
-
-    def test_get_effective_caching(self) -> None:
-        """Test that get_effective caches results."""
-        state = RuntimeState()
-        eff1 = state.get_effective()
-        eff2 = state.get_effective()
-        assert eff1 is eff2  # Same object (cached)
-
-
-class TestRuntimeStateSession:
-    """Test RuntimeState session loading."""
-
-    def test_load_session(self) -> None:
-        """Test loading a session."""
-        state = RuntimeState()
-        session = CompiledSession(
-            environment=Environment(bpm=140.0),
-            tracks={
-                "kick": Track(
-                    meta=TrackMeta(track_id="kick"),
-                    params=TrackParams(s="bd"),
-                )
-            },
-        )
-
-        state.load_session(session)
-        eff = state.get_effective()
-
-        assert eff.environment.bpm == 140.0
-        assert "kick" in eff.tracks
-        assert eff.tracks["kick"].params.s == "bd"
-
     def test_set_bpm(self) -> None:
-        """Test changing BPM."""
+        """Test BPM setting."""
         state = RuntimeState()
-        state.load_session(CompiledSession(environment=Environment(bpm=120.0)))
-
-        state.set_bpm(180.0)
-
-        assert state.bpm == 180.0
-        assert state.step_duration < 0.125  # Faster than 120 BPM
-
-
-class TestRuntimeStateDeepMerge:
-    """Test deep merge functionality."""
-
-    def test_merge_environment(self) -> None:
-        """Test merging environments."""
-        state = RuntimeState()
-
-        # Load base session
-        state.load_session(CompiledSession(
-            environment=Environment(bpm=120.0, scale="C_major"),
-        ))
-
-        # Apply override with different BPM
-        state.apply_override(CompiledSession(
-            environment=Environment(bpm=140.0),
-        ))
-
-        eff = state.get_effective()
-        assert eff.environment.bpm == 140.0
-        assert eff.environment.scale == "C_major"  # Kept from base
-
-    def test_merge_tracks(self) -> None:
-        """Test merging tracks."""
-        state = RuntimeState()
-
-        # Load base session with track
-        state.load_session(CompiledSession(
-            tracks={
-                "kick": Track(
-                    meta=TrackMeta(track_id="kick"),
-                    params=TrackParams(s="bd", gain=0.8),
-                )
-            },
-        ))
-
-        # Apply override with different gain
-        state.apply_override(CompiledSession(
-            tracks={
-                "kick": Track(
-                    meta=TrackMeta(track_id="kick"),
-                    params=TrackParams(s="bd", gain=0.5),
-                )
-            },
-        ))
-
-        eff = state.get_effective()
-        assert eff.tracks["kick"].params.gain == 0.5
-
-    def test_merge_adds_new_track(self) -> None:
-        """Test that merge adds new tracks."""
-        state = RuntimeState()
-
-        state.load_session(CompiledSession(
-            tracks={
-                "kick": Track(
-                    meta=TrackMeta(track_id="kick"),
-                    params=TrackParams(s="bd"),
-                )
-            },
-        ))
-
-        state.apply_override(CompiledSession(
-            tracks={
-                "snare": Track(
-                    meta=TrackMeta(track_id="snare"),
-                    params=TrackParams(s="sd"),
-                )
-            },
-        ))
-
-        eff = state.get_effective()
-        assert "kick" in eff.tracks
-        assert "snare" in eff.tracks
-
-
-class TestRuntimeStateScene:
-    """Test scene activation."""
-
-    def test_apply_scene(self) -> None:
-        """Test activating a scene."""
-        from oiduna_core.ir.scene import Scene
-
-        state = RuntimeState()
-
-        # Load session with scenes
-        state.load_session(CompiledSession(
-            scenes={
-                "intro": Scene(
-                    name="intro",
-                    environment=Environment(bpm=100.0),
-                    tracks={
-                        "pad": Track(
-                            meta=TrackMeta(track_id="pad"),
-                            params=TrackParams(s="pad"),
-                        )
-                    },
-                )
-            },
-        ))
-
-        result = state.apply_scene("intro")
-        assert result is True
-        assert state.active_scene_name == "intro"
-
-        eff = state.get_effective()
-        assert eff.environment.bpm == 100.0
-        assert "pad" in eff.tracks
-
-    def test_apply_scene_not_found(self) -> None:
-        """Test activating non-existent scene."""
-        state = RuntimeState()
-        result = state.apply_scene("nonexistent")
-        assert result is False
-
-    def test_apply_scene_clears_overrides(self) -> None:
-        """Test that scene activation clears live_overrides."""
-        from oiduna_core.ir.scene import Scene
-
-        state = RuntimeState()
-
-        state.load_session(CompiledSession(
-            scenes={
-                "drop": Scene(name="drop", environment=Environment(bpm=140.0))
-            },
-        ))
-
-        # Add an override
-        state.apply_override(CompiledSession(
-            environment=Environment(bpm=120.0)
-        ))
-
-        # Activate scene should clear override
-        state.apply_scene("drop")
-
-        assert state.live_overrides is None
+        state.set_bpm(140.0)
         assert state.bpm == 140.0
 
+        # Test timing calculations updated
+        assert state.step_duration == 60.0 / 140.0 / 4
+        assert state.cps == 140.0 / 60.0 / 4
 
-class TestRuntimeStatePending:
-    """Test pending apply functionality."""
-
-    def test_set_pending(self) -> None:
-        """Test setting pending apply."""
+    def test_bpm_clamping(self) -> None:
+        """Test BPM is clamped to valid range."""
         state = RuntimeState()
-        session = CompiledSession()
 
-        state.set_pending(session, timing="bar")
+        state.set_bpm(0.5)  # Too low
+        assert state.bpm == 1.0
 
-        assert state.pending is not None
-        assert state.pending.timing == "bar"
-        assert state.pending.session is session
+        state.set_bpm(1000.0)  # Too high
+        assert state.bpm == 999.0
 
-    def test_should_apply_pending_now(self) -> None:
-        """Test 'now' timing."""
+    def test_advance_step(self) -> None:
+        """Test advancing step."""
         state = RuntimeState()
-        state.set_pending(CompiledSession(), timing="now")
-        assert state.should_apply_pending() is True
+        assert state.position.step == 0
 
-    def test_should_apply_pending_beat(self) -> None:
-        """Test 'beat' timing."""
+        state.advance_step()
+        assert state.position.step == 1
+
+    def test_reset_position(self) -> None:
+        """Test resetting position."""
         state = RuntimeState()
-        state.set_pending(CompiledSession(), timing="beat")
+        state.position.step = 100
+        state.reset_position()
+        assert state.position.step == 0
 
-        # Step 0 is beat boundary
-        state.position.step = 0
-        assert state.should_apply_pending() is True
 
-        # Step 1 is not
-        state.position.step = 1
-        assert state.should_apply_pending() is False
+class TestTrackRegistration:
+    """Test track registration for mute/solo filtering."""
 
-        # Step 4 is
-        state.position.step = 4
-        assert state.should_apply_pending() is True
-
-    def test_should_apply_pending_bar(self) -> None:
-        """Test 'bar' timing."""
+    def test_register_track(self) -> None:
+        """Test registering a track."""
         state = RuntimeState()
-        state.set_pending(CompiledSession(), timing="bar")
+        state.register_track("kick")
 
-        state.position.step = 0
-        assert state.should_apply_pending() is True
+        assert "kick" in state._known_track_ids
+        assert state.is_track_active("kick")
 
-        state.position.step = 4
-        assert state.should_apply_pending() is False
-
-        state.position.step = 16
-        assert state.should_apply_pending() is True
-
-    def test_should_apply_pending_seq(self) -> None:
-        """Test 'seq' timing (wait for loop)."""
+    def test_register_multiple_tracks(self) -> None:
+        """Test registering multiple tracks."""
         state = RuntimeState()
-        state.set_pending(CompiledSession(), timing="seq")
+        state.register_track("kick")
+        state.register_track("hihat")
+        state.register_track("snare")
 
-        # Step 0 but haven't passed non-zero yet
-        state.position.step = 0
-        assert state.should_apply_pending() is False
+        assert len(state._known_track_ids) == 3
+        assert state.is_track_active("kick")
+        assert state.is_track_active("hihat")
+        assert state.is_track_active("snare")
 
-        # Advance to non-zero
-        state.position.step = 1
-        state.pending.passed_non_zero = True
-
-        # Still not step 0
-        assert state.should_apply_pending() is False
-
-        # Back to step 0 after passing non-zero
-        state.position.step = 0
-        assert state.should_apply_pending() is True
-
-    def test_execute_pending(self) -> None:
-        """Test executing pending apply."""
+    def test_unknown_track_inactive(self) -> None:
+        """Test unknown tracks are inactive."""
         state = RuntimeState()
-        session = CompiledSession(environment=Environment(bpm=160.0))
+        assert not state.is_track_active("unknown")
 
-        state.set_pending(session, timing="now")
-        result = state.execute_pending()
 
+class TestMuteFiltering:
+    """Test mute filtering logic."""
+
+    def test_set_track_mute(self) -> None:
+        """Test muting a track."""
+        state = RuntimeState()
+        state.register_track("kick")
+
+        result = state.set_track_mute("kick", True)
         assert result is True
-        assert state.pending is None
-        assert state.bpm == 160.0
+        assert not state.is_track_active("kick")
 
-    def test_execute_pending_none(self) -> None:
-        """Test executing when no pending."""
+    def test_set_track_mute_unknown_track(self) -> None:
+        """Test muting unknown track returns False."""
         state = RuntimeState()
-        result = state.execute_pending()
+        result = state.set_track_mute("unknown", True)
         assert result is False
 
-
-class TestRuntimeStateActiveTracks:
-    """Test active track filtering."""
-
-    def test_get_active_tracks_no_mute_solo(self) -> None:
-        """Test getting active tracks with no mute/solo."""
+    def test_unmute_track(self) -> None:
+        """Test unmuting a track."""
         state = RuntimeState()
-        state.load_session(CompiledSession(
-            tracks={
-                "kick": Track(
-                    meta=TrackMeta(track_id="kick"),
-                    params=TrackParams(s="bd"),
-                ),
-                "snare": Track(
-                    meta=TrackMeta(track_id="snare"),
-                    params=TrackParams(s="sd"),
-                ),
-            },
-        ))
+        state.register_track("kick")
+        state.set_track_mute("kick", True)
 
-        active = state.get_active_tracks()
-        assert len(active) == 2
-        assert "kick" in active
-        assert "snare" in active
+        state.set_track_mute("kick", False)
+        assert state.is_track_active("kick")
 
-    def test_get_active_tracks_muted(self) -> None:
+    def test_filter_messages_no_mute(self) -> None:
+        """Test filtering with no mute."""
+        state = RuntimeState()
+        state.register_track("kick")
+
+        messages = [
+            ScheduledMessage(
+                destination_id="superdirt",
+                cycle=0.0,
+                step=0,
+                params={"track_id": "kick", "s": "bd"}
+            )
+        ]
+
+        filtered = state.filter_messages(messages)
+        assert len(filtered) == 1
+
+    def test_filter_messages_with_mute(self) -> None:
+        """Test filtering muted tracks."""
+        state = RuntimeState()
+        state.register_track("kick")
+        state.set_track_mute("kick", True)
+
+        messages = [
+            ScheduledMessage(
+                destination_id="superdirt",
+                cycle=0.0,
+                step=0,
+                params={"track_id": "kick", "s": "bd"}
+            )
+        ]
+
+        filtered = state.filter_messages(messages)
+        assert len(filtered) == 0  # Muted
+
+    def test_filter_messages_mixed(self) -> None:
+        """Test filtering with some tracks muted."""
+        state = RuntimeState()
+        state.register_track("kick")
+        state.register_track("hihat")
+        state.set_track_mute("hihat", True)
+
+        messages = [
+            ScheduledMessage(
+                destination_id="superdirt",
+                cycle=0.0,
+                step=0,
+                params={"track_id": "kick", "s": "bd"}
+            ),
+            ScheduledMessage(
+                destination_id="superdirt",
+                cycle=0.0,
+                step=0,
+                params={"track_id": "hihat", "s": "hh"}
+            ),
+        ]
+
+        filtered = state.filter_messages(messages)
+        assert len(filtered) == 1
+        assert filtered[0].params["track_id"] == "kick"
+
+
+class TestSoloFiltering:
+    """Test solo filtering logic."""
+
+    def test_set_track_solo(self) -> None:
+        """Test soloing a track."""
+        state = RuntimeState()
+        state.register_track("kick")
+        state.register_track("hihat")
+
+        result = state.set_track_solo("kick", True)
+        assert result is True
+        assert state.is_track_active("kick")
+        assert not state.is_track_active("hihat")  # Not soloed
+
+    def test_set_track_solo_unknown_track(self) -> None:
+        """Test soloing unknown track returns False."""
+        state = RuntimeState()
+        result = state.set_track_solo("unknown", True)
+        assert result is False
+
+    def test_unsolo_track(self) -> None:
+        """Test unsoloing a track."""
+        state = RuntimeState()
+        state.register_track("kick")
+        state.register_track("hihat")
+        state.set_track_solo("kick", True)
+
+        state.set_track_solo("kick", False)
+        assert state.is_track_active("kick")
+        assert state.is_track_active("hihat")
+
+    def test_filter_messages_with_solo(self) -> None:
+        """Test filtering with solo."""
+        state = RuntimeState()
+        state.register_track("kick")
+        state.register_track("hihat")
+        state.set_track_solo("kick", True)
+
+        messages = [
+            ScheduledMessage(
+                destination_id="superdirt",
+                cycle=0.0,
+                step=0,
+                params={"track_id": "kick", "s": "bd"}
+            ),
+            ScheduledMessage(
+                destination_id="superdirt",
+                cycle=0.0,
+                step=0,
+                params={"track_id": "hihat", "s": "hh"}
+            ),
+        ]
+
+        filtered = state.filter_messages(messages)
+        assert len(filtered) == 1
+        assert filtered[0].params["track_id"] == "kick"
+
+    def test_solo_overrides_mute(self) -> None:
+        """Test solo takes priority over mute."""
+        state = RuntimeState()
+        state.register_track("kick")
+        state.register_track("hihat")
+
+        # Mute kick, but also solo it
+        state.set_track_mute("kick", True)
+        state.set_track_solo("kick", True)
+
+        # Solo overrides mute
+        assert state.is_track_active("kick")
+        assert not state.is_track_active("hihat")
+
+    def test_multiple_solo_tracks(self) -> None:
+        """Test multiple tracks can be soloed."""
+        state = RuntimeState()
+        state.register_track("kick")
+        state.register_track("hihat")
+        state.register_track("snare")
+
+        state.set_track_solo("kick", True)
+        state.set_track_solo("hihat", True)
+
+        assert state.is_track_active("kick")
+        assert state.is_track_active("hihat")
+        assert not state.is_track_active("snare")
+
+
+class TestFilterMessagesEdgeCases:
+    """Test edge cases for message filtering."""
+
+    def test_filter_messages_without_track_id(self) -> None:
+        """Test messages without track_id are not filtered."""
+        state = RuntimeState()
+        state.register_track("kick")
+        state.set_track_mute("kick", True)
+
+        # Message without track_id
+        messages = [
+            ScheduledMessage(
+                destination_id="superdirt",
+                cycle=0.0,
+                step=0,
+                params={"s": "bd"}  # No track_id
+            )
+        ]
+
+        filtered = state.filter_messages(messages)
+        assert len(filtered) == 1  # Not filtered
+
+    def test_filter_messages_empty_list(self) -> None:
+        """Test filtering empty message list."""
+        state = RuntimeState()
+        filtered = state.filter_messages([])
+        assert len(filtered) == 0
+
+    def test_filter_messages_unknown_track_id(self) -> None:
+        """Test messages with unknown track_id are filtered out."""
+        state = RuntimeState()
+        state.register_track("kick")
+
+        messages = [
+            ScheduledMessage(
+                destination_id="superdirt",
+                cycle=0.0,
+                step=0,
+                params={"track_id": "unknown", "s": "bd"}
+            )
+        ]
+
+        filtered = state.filter_messages(messages)
+        assert len(filtered) == 0  # Unknown track_id = inactive
+
+
+class TestGetActiveTracks:
+    """Test get_active_track_ids method."""
+
+    def test_get_active_track_ids_no_filtering(self) -> None:
+        """Test getting active tracks with no filtering."""
+        state = RuntimeState()
+        state.register_track("kick")
+        state.register_track("hihat")
+
+        active = state.get_active_track_ids()
+        assert set(active) == {"kick", "hihat"}
+
+    def test_get_active_track_ids_with_mute(self) -> None:
         """Test getting active tracks with mute."""
         state = RuntimeState()
-        state.load_session(CompiledSession(
-            tracks={
-                "kick": Track(
-                    meta=TrackMeta(track_id="kick", mute=True),
-                    params=TrackParams(s="bd"),
-                ),
-                "snare": Track(
-                    meta=TrackMeta(track_id="snare"),
-                    params=TrackParams(s="sd"),
-                ),
-            },
-        ))
+        state.register_track("kick")
+        state.register_track("hihat")
+        state.set_track_mute("hihat", True)
 
-        active = state.get_active_tracks()
-        assert len(active) == 1
-        assert "snare" in active
+        active = state.get_active_track_ids()
+        assert active == ["kick"]
 
-    def test_get_active_tracks_solo(self) -> None:
+    def test_get_active_track_ids_with_solo(self) -> None:
         """Test getting active tracks with solo."""
         state = RuntimeState()
-        state.load_session(CompiledSession(
-            tracks={
-                "kick": Track(
-                    meta=TrackMeta(track_id="kick", solo=True),
-                    params=TrackParams(s="bd"),
-                ),
-                "snare": Track(
-                    meta=TrackMeta(track_id="snare"),
-                    params=TrackParams(s="sd"),
-                ),
-            },
-        ))
+        state.register_track("kick")
+        state.register_track("hihat")
+        state.set_track_solo("kick", True)
 
-        active = state.get_active_tracks()
-        assert len(active) == 1
-        assert "kick" in active
+        active = state.get_active_track_ids()
+        assert active == ["kick"]
 
 
-class TestRuntimeStateStatus:
-    """Test status dict generation."""
+class TestStatusDict:
+    """Test to_status_dict method."""
 
-    def test_to_status_dict(self) -> None:
-        """Test converting to status dict."""
+    def test_to_status_dict_basic(self) -> None:
+        """Test basic status dict output."""
         state = RuntimeState()
-        state.load_session(CompiledSession(
-            environment=Environment(bpm=128.0),
-            tracks={
-                "kick": Track(
-                    meta=TrackMeta(track_id="kick"),
-                    params=TrackParams(s="bd"),
-                ),
-            },
-        ))
-        state.playback_state = PlaybackState.PLAYING
-        state.position.step = 32
+        state.register_track("kick")
 
         status = state.to_status_dict()
 
-        assert status["playing"] is True
-        assert status["playback_state"] == "playing"
-        assert status["bpm"] == 128.0
-        assert status["position"]["step"] == 32
-        assert "kick" in status["active_tracks"]
-        assert status["has_pending"] is False
+        assert status["playing"] is False
+        assert status["playback_state"] == "stopped"
+        assert status["bpm"] == 120.0
+        assert "position" in status
+        assert status["active_tracks"] == ["kick"]
+        assert status["known_tracks"] == ["kick"]
+        assert status["muted_tracks"] == []
+        assert status["soloed_tracks"] == []
+
+    def test_to_status_dict_with_mute_solo(self) -> None:
+        """Test status dict with mute/solo."""
+        state = RuntimeState()
+        state.register_track("kick")
+        state.register_track("hihat")
+        state.register_track("snare")
+        state.set_track_mute("snare", True)
+        state.set_track_solo("kick", True)
+
+        status = state.to_status_dict()
+
+        assert status["active_tracks"] == ["kick"]
+        assert set(status["known_tracks"]) == {"kick", "hihat", "snare"}
+        assert status["muted_tracks"] == ["snare"]
+        assert status["soloed_tracks"] == ["kick"]
