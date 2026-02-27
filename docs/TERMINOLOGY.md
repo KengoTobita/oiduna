@@ -414,15 +414,58 @@ TrackとEventSequenceからOSCメッセージを生成します。」
 
 ---
 
+---
+
+## API層の用語（Phase 4-5追加）
+
+### SessionContainer
+
+**定義**: SessionManagerを置き換える軽量コンテナパターン
+
+**構造**:
+```python
+SessionContainer
+├── clients: ClientManager       # Client CRUD
+├── tracks: TrackManager         # Track CRUD
+├── patterns: PatternManager     # Pattern CRUD
+├── environment: EnvironmentManager
+└── destinations: DestinationManager
+```
+
+**使用例**:
+```python
+container = SessionContainer()
+container.clients.create("alice", "Alice", "mars")
+container.tracks.create("kick", "Kick Track", ...)
+```
+
+**詳細**: [knowledge/adr/0010-session-container-refactoring.md](knowledge/adr/0010-session-container-refactoring.md)
+
+### oiduna_models / oiduna_auth / oiduna_session
+
+**Phase 4で追加された新規パッケージ**:
+- `oiduna_models`: Session/Track/Pattern/Event/Client データモデル
+- `oiduna_auth`: UUID Token認証システム
+- `oiduna_session`: SessionContainer + 専門マネージャー
+
+**詳細**: [../IMPLEMENTATION_COMPLETE.md](../IMPLEMENTATION_COMPLETE.md)
+
+**Note**: これらはAPI層の実装詳細です。コアループエンジン（ScheduledMessageBatch処理）とは独立しています。
+
+---
+
 ## 参照ドキュメント
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) - システム全体のアーキテクチャ
 - [DATA_MODEL_REFERENCE.md](DATA_MODEL_REFERENCE.md) - データモデル詳細
 - [OIDUNA_CONCEPTS.md](OIDUNA_CONCEPTS.md) - Oidunaのコンセプト
-- [MIGRATION_GUIDE_SCHEDULED_MESSAGE_BATCH.md](MIGRATION_GUIDE_SCHEDULED_MESSAGE_BATCH.md) - 移行ガイド
+- [archive/MIGRATION_GUIDE_SCHEDULED_MESSAGE_BATCH.md](archive/MIGRATION_GUIDE_SCHEDULED_MESSAGE_BATCH.md) - 移行ガイド (archive)
+- [../IMPLEMENTATION_COMPLETE.md](../IMPLEMENTATION_COMPLETE.md) - Phase 1-5完了サマリー
+- [knowledge/adr/0010-session-container-refactoring.md](knowledge/adr/0010-session-container-refactoring.md) - SessionContainer ADR
 
 ---
 
-**バージョン**: 2.0.0 (ScheduledMessageBatch統合版)
+**バージョン**: 2.1.0 (SessionContainer追加版)
 **作成日**: 2026-02-27
+**最終更新**: 2026-02-28 (Phase 5完了)
 **メンテナンス**: 用語追加時はこのファイルを更新

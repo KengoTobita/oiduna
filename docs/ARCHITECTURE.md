@@ -370,13 +370,17 @@ cd Modular_Audio_Real-time_Scripting && uv run mypy apps packages
 ## 関連ドキュメント
 
 - [MIGRATION_GUIDE_SCHEDULED_MESSAGE_BATCH.md](MIGRATION_GUIDE_SCHEDULED_MESSAGE_BATCH.md) - アーキテクチャ統合マイグレーションガイド
-- [ARCHITECTURE_UNIFICATION_COMPLETE.md](ARCHITECTURE_UNIFICATION_COMPLETE.md) - アーキテクチャ統合完了記録
+- [archive/ARCHITECTURE_UNIFICATION_COMPLETE.md](archive/ARCHITECTURE_UNIFICATION_COMPLETE.md) - アーキテクチャ統合完了記録 (archive)
 - [DATA_MODEL_REFERENCE.md](DATA_MODEL_REFERENCE.md) - データモデル設計と参照
 - [ADR一覧](knowledge/adr/) - 重要な設計判断の記録
+- [../IMPLEMENTATION_COMPLETE.md](../IMPLEMENTATION_COMPLETE.md) - Phase 1-5完了サマリー (API層)
+- [knowledge/adr/0010-session-container-refactoring.md](knowledge/adr/0010-session-container-refactoring.md) - SessionContainer ADR
 
 ---
 
-**バージョン**: 2.0.0 (SSOT準拠版)
-**更新日**: 2026-02-23
+**バージョン**: 2.1.0 (SessionContainer追加版)
+**更新日**: 2026-02-28 (Phase 5完了)
 **作成者**: Claude Code
 **ドキュメント方針**: アーキテクチャと設計意図のみ記載、詳細はコードと設定ファイルを参照
+
+> **Note**: このドキュメントは主にデータフローとコアループエンジンを説明します。API層（SessionContainer、REST API等）の詳細は上記リンクを参照してください。

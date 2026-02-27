@@ -204,7 +204,7 @@ CompiledSession
 - 変換処理のコストが高い
 - 送信先依存の概念が残存（orbit等）
 
-### Phase 3: ScheduledMessageBatch（現在）
+### Phase 3: ScheduledMessageBatch（データフォーマット統一）
 
 ```python
 # フラット構造 + 送信先非依存
@@ -222,8 +222,42 @@ ScheduledMessageBatch
 - ✅ 拡張可能（Extension System）
 
 **移行の記録**:
-- [ARCHITECTURE_UNIFICATION_COMPLETE.md](ARCHITECTURE_UNIFICATION_COMPLETE.md)
-- [MIGRATION_GUIDE_SCHEDULED_MESSAGE_BATCH.md](MIGRATION_GUIDE_SCHEDULED_MESSAGE_BATCH.md)
+- [archive/ARCHITECTURE_UNIFICATION_COMPLETE.md](archive/ARCHITECTURE_UNIFICATION_COMPLETE.md)
+- [archive/MIGRATION_GUIDE_SCHEDULED_MESSAGE_BATCH.md](archive/MIGRATION_GUIDE_SCHEDULED_MESSAGE_BATCH.md)
+
+### Phase 4-5: API層の刷新とSessionContainer（実装品質向上）
+
+**Phase 4 (API層)**: 階層的データモデルとREST API
+```python
+# 新規パッケージ
+oiduna_models      # Session/Track/Pattern/Event/Client
+oiduna_auth        # UUID Token認証
+oiduna_session     # SessionContainer + 専門マネージャー
+oiduna_api         # FastAPI routes
+```
+
+**Phase 5 (SessionContainer)**: SessionManager分割とアーキテクチャ改善
+```python
+# SessionContainer: 軽量コンテナパターン
+SessionContainer
+├── clients: ClientManager
+├── tracks: TrackManager
+├── patterns: PatternManager
+├── environment: EnvironmentManager
+└── destinations: DestinationManager
+```
+
+**改善点**:
+- ✅ 単一責任原則の遵守（497行 → 5つの専門マネージャー）
+- ✅ 直接アクセスAPI（Facadeパターン廃止）
+- ✅ テスト容易性向上（+84テスト）
+- ✅ 型安全性（Pydantic、mypy strict）
+
+**詳細ドキュメント**:
+- [../../IMPLEMENTATION_COMPLETE.md](../../IMPLEMENTATION_COMPLETE.md) - Phase 1-5完了サマリー
+- [knowledge/adr/0010-session-container-refactoring.md](knowledge/adr/0010-session-container-refactoring.md) - ADR-0010
+
+**Note**: Phase 4-5はAPI実装の改善であり、コアループエンジン（ScheduledMessageBatch処理）には影響しません。
 
 ---
 
