@@ -13,9 +13,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from oiduna_api.config import settings
+from oiduna_api.dependencies import get_session_manager
 from oiduna_api.extensions import discover_extensions
 from oiduna_api.routes import assets, dashboard, midi, playback, stream, auth, session, tracks, patterns, admin
 from oiduna_api.services.loop_service import LoopService, get_loop_service, lifespan
+from oiduna_destination import load_destinations_from_file
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +28,7 @@ async def lifespan_wrapper(app: FastAPI):
     FastAPI lifespan manager with extension system integration.
 
     Lifecycle:
+    0. Load destinations from destinations.yaml into SessionManager
     1. Auto-discover extensions via entry_points
     2. Run extension startup hooks
     3. Collect runtime hooks for loop_engine
@@ -53,7 +56,22 @@ async def lifespan_wrapper(app: FastAPI):
         midi_port_name=settings.midi_port,
         before_send_hooks=before_send_hooks,
     ):
-        # 5. Register extension routers (must be before app starts accepting requests)
+        # 5. Initialize SessionManager with event sink and load destinations
+        manager = get_session_manager()
+        try:
+            destinations_path = Path("destinations.yaml")
+            if destinations_path.exists():
+                destinations = load_destinations_from_file(destinations_path)
+                for dest_id, dest_config in destinations.items():
+                    manager.add_destination(dest_config)
+                logger.info(f"Loaded {len(destinations)} destination(s) from {destinations_path}")
+            else:
+                logger.warning(f"Destinations file not found: {destinations_path}")
+        except Exception as e:
+            logger.error(f"Failed to load destinations: {e}")
+            # Don't fail startup - destinations can be added via admin API
+
+        # 6. Register extension routers (must be before app starts accepting requests)
         for name, ext in pipeline.extensions:
             router = ext.get_router()
             if router is not None:
@@ -62,7 +80,7 @@ async def lifespan_wrapper(app: FastAPI):
 
         yield
 
-        # 6. Run extension shutdown hooks
+        # 7. Run extension shutdown hooks
         await pipeline.shutdown_all()
 
 

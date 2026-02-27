@@ -9,7 +9,7 @@ It provides CRUD operations for:
 - Environment
 """
 
-from typing import Any, Optional
+from typing import Any, Optional, Protocol
 from oiduna_models import (
     Session,
     Track,
@@ -22,12 +22,22 @@ from oiduna_models import (
 from oiduna_destination.destination_models import DestinationConfig
 
 
+class EventSink(Protocol):
+    """Protocol for event sinks (e.g., InProcessStateSink)."""
+
+    def _push(self, event: dict[str, Any]) -> None:
+        """Push an event to the sink."""
+        ...
+
+
 class SessionManager:
     """
     In-memory session state management (singleton).
 
     Provides CRUD operations for all session entities while maintaining
     referential integrity and ownership rules.
+
+    Optionally emits SSE events for state changes if event_sink is provided.
 
     Example:
         >>> manager = SessionManager()
@@ -46,9 +56,19 @@ class SessionManager:
         ... )
     """
 
-    def __init__(self):
+    def __init__(self, event_sink: Optional[EventSink] = None):
         self.session = Session()
         self.id_gen = IDGenerator()
+        self.event_sink = event_sink
+
+    def _emit_event(self, event_type: str, data: dict[str, Any]) -> None:
+        """Emit an SSE event if event_sink is configured."""
+        if self.event_sink:
+            try:
+                self.event_sink._push({"type": event_type, "data": data})
+            except Exception:
+                # Don't fail operations if event emission fails
+                pass
 
     # =========================================================================
     # Client CRUD
@@ -88,6 +108,14 @@ class SessionManager:
         )
 
         self.session.clients[client_id] = client
+
+        # Emit event
+        self._emit_event("client_connected", {
+            "client_id": client_id,
+            "client_name": client_name,
+            "distribution": distribution,
+        })
+
         return client
 
     def get_client(self, client_id: str) -> Optional[ClientInfo]:
@@ -110,6 +138,12 @@ class SessionManager:
         """
         if client_id in self.session.clients:
             del self.session.clients[client_id]
+
+            # Emit event
+            self._emit_event("client_disconnected", {
+                "client_id": client_id,
+            })
+
             return True
         return False
 
@@ -188,6 +222,15 @@ class SessionManager:
         )
 
         self.session.tracks[track_id] = track
+
+        # Emit event
+        self._emit_event("track_created", {
+            "track_id": track_id,
+            "track_name": track_name,
+            "client_id": client_id,
+            "destination_id": destination_id,
+        })
+
         return track
 
     def get_track(self, track_id: str) -> Optional[Track]:
@@ -218,6 +261,14 @@ class SessionManager:
             return None
 
         track.base_params.update(base_params)
+
+        # Emit event
+        self._emit_event("track_updated", {
+            "track_id": track_id,
+            "client_id": track.client_id,
+            "updated_params": base_params,
+        })
+
         return track
 
     def delete_track(self, track_id: str) -> bool:
@@ -228,7 +279,15 @@ class SessionManager:
             True if deleted, False if not found
         """
         if track_id in self.session.tracks:
+            track = self.session.tracks[track_id]
             del self.session.tracks[track_id]
+
+            # Emit event
+            self._emit_event("track_deleted", {
+                "track_id": track_id,
+                "client_id": track.client_id,
+            })
+
             return True
         return False
 
@@ -285,6 +344,17 @@ class SessionManager:
         )
 
         track.patterns[pattern_id] = pattern
+
+        # Emit event
+        self._emit_event("pattern_created", {
+            "track_id": track_id,
+            "pattern_id": pattern_id,
+            "pattern_name": pattern_name,
+            "client_id": client_id,
+            "active": active,
+            "event_count": len(pattern.events),
+        })
+
         return pattern
 
     def get_pattern(
@@ -338,6 +408,15 @@ class SessionManager:
         if events is not None:
             pattern.events = events
 
+        # Emit event
+        self._emit_event("pattern_updated", {
+            "track_id": track_id,
+            "pattern_id": pattern_id,
+            "client_id": pattern.client_id,
+            "active": pattern.active,
+            "event_count": len(pattern.events),
+        })
+
         return pattern
 
     def delete_pattern(
@@ -356,7 +435,16 @@ class SessionManager:
             return False
 
         if pattern_id in track.patterns:
+            pattern = track.patterns[pattern_id]
             del track.patterns[pattern_id]
+
+            # Emit event
+            self._emit_event("pattern_deleted", {
+                "track_id": track_id,
+                "pattern_id": pattern_id,
+                "client_id": pattern.client_id,
+            })
+
             return True
         return False
 
@@ -379,10 +467,17 @@ class SessionManager:
         Returns:
             Updated Environment
         """
+        updated_fields = {}
         if bpm is not None:
             self.session.environment.bpm = bpm
+            updated_fields["bpm"] = bpm
         if metadata is not None:
             self.session.environment.metadata.update(metadata)
+            updated_fields["metadata"] = metadata
+
+        # Emit event
+        if updated_fields:
+            self._emit_event("environment_updated", updated_fields)
 
         return self.session.environment
 

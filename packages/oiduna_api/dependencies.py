@@ -3,6 +3,7 @@
 from fastapi import Request
 
 from oiduna_api.extensions import ExtensionPipeline
+from oiduna_api.services.loop_service import get_loop_service
 from oiduna_session import SessionManager
 
 
@@ -14,6 +15,8 @@ def get_session_manager() -> SessionManager:
     """
     Get the singleton SessionManager instance.
 
+    On first call, injects the event sink from LoopService for SSE events.
+
     Usage:
         @router.get("/tracks")
         async def list_tracks(
@@ -23,7 +26,16 @@ def get_session_manager() -> SessionManager:
     """
     global _session_manager
     if _session_manager is None:
-        _session_manager = SessionManager()
+        # Get event sink from LoopService
+        event_sink = None
+        try:
+            loop_service = get_loop_service()
+            event_sink = loop_service.get_state_sink()
+        except RuntimeError:
+            # LoopService not initialized yet (e.g., during testing)
+            pass
+
+        _session_manager = SessionManager(event_sink=event_sink)
     return _session_manager
 
 

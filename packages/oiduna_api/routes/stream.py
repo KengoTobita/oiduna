@@ -42,12 +42,24 @@ async def stream_events(
     """SSE stream of engine events.
 
     Event types:
-    - connected  — emitted once on connection
-    - position   — step/bar/beat updates
-    - status     — playback state changes
-    - tracks     — track list updates
-    - error      — engine errors
-    - heartbeat  — keep-alive (every 15 s)
+    Engine events:
+    - connected           — emitted once on connection
+    - position            — step/bar/beat updates
+    - status              — playback state changes
+    - tracks              — track list updates (legacy)
+    - error               — engine errors
+    - heartbeat           — keep-alive (every 15 s)
+
+    Session events (Phase 3):
+    - client_connected    — new client registered
+    - client_disconnected — client removed
+    - track_created       — track added to session
+    - track_updated       — track base_params changed
+    - track_deleted       — track removed
+    - pattern_created     — pattern added to track
+    - pattern_updated     — pattern active state or events changed
+    - pattern_deleted     — pattern removed
+    - environment_updated — BPM or metadata changed
     """
     sink = loop_service.get_state_sink()
     return StreamingResponse(
