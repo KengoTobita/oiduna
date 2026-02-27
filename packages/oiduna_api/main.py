@@ -14,7 +14,7 @@ from fastapi.templating import Jinja2Templates
 
 from oiduna_api.config import settings
 from oiduna_api.extensions import discover_extensions
-from oiduna_api.routes import assets, dashboard, midi, playback, stream, tracks
+from oiduna_api.routes import assets, dashboard, midi, playback, stream
 from oiduna_api.services.loop_service import LoopService, get_loop_service, lifespan
 
 logger = logging.getLogger(__name__)
@@ -93,7 +93,8 @@ app.include_router(dashboard.router, tags=["dashboard"])
 # Clients should send ScheduledMessageBatch to /playback/session endpoint
 app.include_router(playback.router, prefix="/playback", tags=["playback"])
 app.include_router(stream.router, tags=["stream"])
-app.include_router(tracks.router, prefix="/tracks", tags=["tracks"])
+# tracks router removed - incompatible with ScheduledMessageBatch architecture
+# Track management will be redesigned in future versions
 app.include_router(midi.router, prefix="/midi", tags=["midi"])
 app.include_router(assets.router, prefix="/assets", tags=["assets"])
 
