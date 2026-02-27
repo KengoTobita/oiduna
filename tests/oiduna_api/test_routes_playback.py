@@ -24,26 +24,6 @@ def test_get_status(client: TestClient):
     assert "active_tracks" in data
 
 
-def test_load_pattern_success(client: TestClient):
-    """Test POST /playback/pattern with valid data"""
-    session_data = {
-        "environment": {"bpm": 120},
-        "tracks": {},
-        "sequences": {}
-    }
-
-    response = client.post("/playback/pattern", json=session_data)
-    assert response.status_code == 200
-    assert response.json()["status"] == "ok"
-
-
-def test_load_pattern_with_pydantic_validation(client: TestClient):
-    """Test that CompileCommand validates the payload"""
-    # This should still work as Pydantic has default factories
-    response = client.post("/playback/pattern", json={})
-    assert response.status_code == 200
-
-
 def test_start_playback(client: TestClient):
     """Test POST /playback/start endpoint"""
     response = client.post("/playback/start")

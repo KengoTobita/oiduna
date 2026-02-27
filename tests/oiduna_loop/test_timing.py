@@ -32,11 +32,9 @@ class TestStepLoopDriftCorrection:
     def test_anchor_time_resets_on_stop(
         self,
         test_engine: LoopEngine,
-        sample_session_data: dict,
     ) -> None:
         """Anchor time should reset to None when playback stops."""
-        # Setup: Load session and start playing
-        test_engine._handle_compile(sample_session_data)
+        # Setup: Start playing
         test_engine._handle_play({})
 
         # Stop playback
@@ -49,11 +47,9 @@ class TestStepLoopDriftCorrection:
     def test_anchor_time_resets_on_pause(
         self,
         test_engine: LoopEngine,
-        sample_session_data: dict,
     ) -> None:
         """Anchor time should reset when playback is paused."""
-        # Setup: Load session and start playing
-        test_engine._handle_compile(sample_session_data)
+        # Setup: Start playing
         test_engine._handle_play({})
 
         # Pause playback
