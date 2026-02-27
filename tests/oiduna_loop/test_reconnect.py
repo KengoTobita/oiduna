@@ -90,7 +90,7 @@ class TestPanicCommand:
     ) -> None:
         """Panic command should stop playback."""
         # Setup: Start playing
-        test_engine._handle_play({})
+        test_engine.handle_play({})
         assert test_engine.state.playback_state == PlaybackState.PLAYING
 
         # Inject panic command
@@ -108,7 +108,7 @@ class TestPanicCommand:
     ) -> None:
         """Panic command should reset position to 0."""
         # Setup: Start playing and advance position
-        test_engine._handle_play({})
+        test_engine.handle_play({})
         test_engine.state.advance_step()
         test_engine.state.advance_step()
         assert test_engine.state.position.step > 0

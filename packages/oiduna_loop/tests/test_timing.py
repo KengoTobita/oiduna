@@ -37,10 +37,10 @@ class TestStepLoopDriftCorrection:
         """Anchor time should reset to None when playback stops."""
         # Setup: Load session and start playing
         test_engine._handle_compile(sample_session_data)
-        test_engine._handle_play({})
+        test_engine.handle_play({})
 
         # Stop playback
-        test_engine._handle_stop({})
+        test_engine.handle_stop({})
 
         # Anchor should be reset
         assert getattr(test_engine, "_step_anchor_time", None) is None
@@ -54,10 +54,10 @@ class TestStepLoopDriftCorrection:
         """Anchor time should reset when playback is paused."""
         # Setup: Load session and start playing
         test_engine._handle_compile(sample_session_data)
-        test_engine._handle_play({})
+        test_engine.handle_play({})
 
         # Pause playback
-        test_engine._handle_pause({})
+        test_engine.handle_pause({})
 
         # Anchor should be reset (will re-anchor on resume)
         assert getattr(test_engine, "_step_anchor_time", None) is None

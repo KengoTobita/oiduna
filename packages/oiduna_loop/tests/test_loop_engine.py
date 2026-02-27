@@ -47,7 +47,7 @@ class TestLoopEngineCommands:
         """Play command should start playback and send MIDI start."""
         test_engine._midi_enabled = True
 
-        test_engine._handle_play({})
+        test_engine.handle_play({})
 
         assert test_engine.state.playing is True
         assert mock_midi.started is True
@@ -62,7 +62,7 @@ class TestLoopEngineCommands:
         test_engine.state.playback_state = PlaybackState.PAUSED
         test_engine.state.position.step = 10
 
-        test_engine._handle_play({})
+        test_engine.handle_play({})
 
         # Position should be maintained
         assert test_engine.state.position.step == 10
@@ -81,7 +81,7 @@ class TestLoopEngineCommands:
         test_engine.state.playback_state = PlaybackState.STOPPED
         test_engine.state.position.step = 0
 
-        test_engine._handle_play({})
+        test_engine.handle_play({})
 
         assert test_engine.state.position.step == 0
         assert test_engine.state.playback_state == PlaybackState.PLAYING
@@ -94,7 +94,7 @@ class TestLoopEngineCommands:
         test_engine._midi_enabled = True
         test_engine.state.playing = True
 
-        test_engine._handle_play({})
+        test_engine.handle_play({})
 
         # Should not send another start
         assert mock_midi.started is False
@@ -104,7 +104,7 @@ class TestLoopEngineCommands:
         test_engine._midi_enabled = True
         test_engine.state.playing = True
 
-        test_engine._handle_stop({})
+        test_engine.handle_stop({})
 
         assert test_engine.state.playing is False
         assert mock_midi.stopped is True
@@ -114,7 +114,7 @@ class TestLoopEngineCommands:
         test_engine._midi_enabled = True
         test_engine.state.playback_state = PlaybackState.STOPPED
 
-        test_engine._handle_stop({})
+        test_engine.handle_stop({})
 
         assert mock_midi.stopped is False
 
@@ -124,7 +124,7 @@ class TestLoopEngineCommands:
         test_engine.state.playback_state = PlaybackState.PAUSED
         test_engine.state.position.step = 10
 
-        test_engine._handle_stop({})
+        test_engine.handle_stop({})
 
         assert test_engine.state.playback_state == PlaybackState.STOPPED
         assert test_engine.state.position.step == 0  # Position reset
@@ -135,7 +135,7 @@ class TestLoopEngineCommands:
         test_engine.state.playback_state = PlaybackState.PLAYING
         test_engine.state.position.step = 15
 
-        test_engine._handle_stop({})
+        test_engine.handle_stop({})
 
         assert test_engine.state.position.step == 0
         assert test_engine.state.playback_state == PlaybackState.STOPPED
@@ -145,7 +145,7 @@ class TestLoopEngineCommands:
         test_engine.state.playback_state = PlaybackState.PLAYING
         test_engine.state.position.step = 10
 
-        test_engine._handle_pause({})
+        test_engine.handle_pause({})
 
         assert test_engine.state.playback_state == PlaybackState.PAUSED
         assert test_engine.state.position.step == 10  # Position preserved
@@ -155,7 +155,7 @@ class TestLoopEngineCommands:
         test_engine.state.playback_state = PlaybackState.STOPPED
         test_engine.state.position.step = 0
 
-        test_engine._handle_pause({})
+        test_engine.handle_pause({})
 
         # State should remain STOPPED
         assert test_engine.state.playback_state == PlaybackState.STOPPED
@@ -265,12 +265,12 @@ class TestLoopEngineIntegration:
         assert "kick" in test_engine.state.tracks
 
         # Start playback
-        test_engine._handle_play({})
+        test_engine.handle_play({})
         assert test_engine.state.playing is True
         assert mock_midi.started is True
 
         # Stop playback
-        test_engine._handle_stop({})
+        test_engine.handle_stop({})
         assert test_engine.state.playing is False
         assert mock_midi.stopped is True
 

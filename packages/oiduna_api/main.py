@@ -14,7 +14,7 @@ from fastapi.templating import Jinja2Templates
 
 from oiduna_api.config import settings
 from oiduna_api.extensions import discover_extensions
-from oiduna_api.routes import assets, dashboard, midi, patterns, playback, stream, tracks
+from oiduna_api.routes import assets, dashboard, midi, playback, stream, tracks
 from oiduna_api.services.loop_service import LoopService, get_loop_service, lifespan
 
 logger = logging.getLogger(__name__)
@@ -89,24 +89,13 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # Include routers
 app.include_router(dashboard.router, tags=["dashboard"])
-app.include_router(patterns.router, prefix="/patterns", tags=["patterns"])
+# patterns router removed - pattern management is client responsibility
+# Clients should send ScheduledMessageBatch to /playback/session endpoint
 app.include_router(playback.router, prefix="/playback", tags=["playback"])
 app.include_router(stream.router, tags=["stream"])
 app.include_router(tracks.router, prefix="/tracks", tags=["tracks"])
 app.include_router(midi.router, prefix="/midi", tags=["midi"])
 app.include_router(assets.router, prefix="/assets", tags=["assets"])
-
-
-# @app.get("/")
-# async def root():
-#     """Root endpoint with API information"""
-#     return {
-#         "name": "Oiduna API",
-#         "version": "0.1.0",
-#         "description": "Real-time SuperDirt/MIDI loop engine HTTP API",
-#         "docs": "/docs",
-#         "health": "/health",
-#     }
 
 
 @app.get("/health")

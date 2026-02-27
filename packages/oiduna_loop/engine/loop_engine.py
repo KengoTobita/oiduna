@@ -21,6 +21,7 @@ import logging
 import time
 import traceback
 from typing import Any
+from collections.abc import Callable
 
 from pydantic import ValidationError
 
@@ -39,12 +40,13 @@ from ..protocols import CommandSource, MidiOutput, OscOutput, StateSink
 from ..result import CommandResult
 from ..state import PlaybackState, RuntimeState
 from .clock_generator import ClockGenerator
+from .command_handler import CommandHandler
 from .note_scheduler import NoteScheduler
 # New destination-based architecture imports
 from pathlib import Path
 
 try:
-    from oiduna_scheduler.scheduler_models import ScheduledMessageBatch
+    from oiduna_scheduler.scheduler_models import ScheduledMessageBatch, ScheduledMessage
     from oiduna_scheduler.scheduler import MessageScheduler
     from oiduna_scheduler.router import DestinationRouter
     from oiduna_scheduler.senders import OscDestinationSender, MidiDestinationSender
@@ -52,15 +54,12 @@ try:
     from oiduna_destination.loader import load_destinations_from_file
 except ImportError:
     # Fallback for local development
-    import sys
-    sys.path.insert(0, str(Path(__file__).parent.parent.parent / "oiduna_scheduler"))
-    sys.path.insert(0, str(Path(__file__).parent.parent.parent / "oiduna_destination"))
-    from scheduler_models import ScheduledMessageBatch
-    from scheduler import MessageScheduler
-    from router import DestinationRouter
-    from senders import OscDestinationSender, MidiDestinationSender
-    from destination_models import OscDestinationConfig, MidiDestinationConfig
-    from loader import load_destinations_from_file
+    from oiduna_scheduler.scheduler_models import ScheduledMessageBatch, ScheduledMessage
+    from oiduna_scheduler.scheduler import MessageScheduler
+    from oiduna_scheduler.router import DestinationRouter
+    from oiduna_scheduler.senders import OscDestinationSender, MidiDestinationSender
+    from oiduna_destination.destination_models import OscDestinationConfig, MidiDestinationConfig
+    from oiduna_destination.loader import load_destinations_from_file
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +95,7 @@ class LoopEngine:
         midi: MidiOutput,
         commands: CommandSource,
         publisher: StateSink,
-        before_send_hooks: list | None = None,
+        before_send_hooks: list[Callable[[list[ScheduledMessage], float, int], list[ScheduledMessage]]] | None = None,
     ):
         """
         Initialize LoopEngine with injected dependencies.
@@ -124,6 +123,9 @@ class LoopEngine:
         # Processors (Martin Fowler: Extract Class)
         self._note_scheduler = NoteScheduler(self._midi)
         self._clock_generator = ClockGenerator(self._midi)
+
+        # Command handler (extracted for Single Responsibility Principle)
+        self._command_handler: CommandHandler | None = None  # Initialized after state setup
 
         # Control flags
         self._running = False
@@ -177,6 +179,16 @@ class LoopEngine:
         self._commands.connect()
         self._publisher.connect()
 
+        # Initialize command handler BEFORE registering handlers
+        if self._command_handler is None:
+            self._command_handler = CommandHandler(
+                state=self.state,
+                clock_generator=self._clock_generator,
+                note_scheduler=self._note_scheduler,
+                publisher=self._publisher,
+                midi_enabled=self._midi_enabled,
+            )
+
         # Register command handlers
         self._register_handlers()
 
@@ -191,7 +203,7 @@ class LoopEngine:
 
         # Stop playback if not already stopped
         if self.state.playback_state != PlaybackState.STOPPED:
-            self._handle_stop({})
+            self.handle_stop({})
 
         # Disconnect
         self._osc.disconnect()
@@ -203,16 +215,31 @@ class LoopEngine:
 
     def _register_handlers(self) -> None:
         """Register command handlers"""
-        self._commands.register_handler("session", self._handle_session)  # New destination-based API
-        self._commands.register_handler("play", self._handle_play)
-        self._commands.register_handler("stop", self._handle_stop)
-        self._commands.register_handler("pause", self._handle_pause)
-        self._commands.register_handler("mute", self._handle_mute)
-        self._commands.register_handler("solo", self._handle_solo)
-        self._commands.register_handler("bpm", self._handle_bpm)
+        # Initialize command handler if not already done (for tests)
+        if self._command_handler is None:
+            self._command_handler = CommandHandler(
+                state=self.state,
+                clock_generator=self._clock_generator,
+                note_scheduler=self._note_scheduler,
+                publisher=self._publisher,
+                midi_enabled=self._midi_enabled,
+            )
+
+        # Session loading (remains in LoopEngine - needs access to schedulers)
+        self._commands.register_handler("session", self._handle_session)
+
+        # Playback commands (delegated to CommandHandler via wrappers)
+        self._commands.register_handler("play", self._command_handler.handle_play)
+        self._commands.register_handler("stop", self._command_handler.handle_stop)
+        self._commands.register_handler("pause", self._command_handler.handle_pause)
+        self._commands.register_handler("mute", self._command_handler.handle_mute)
+        self._commands.register_handler("solo", self._command_handler.handle_solo)
+        self._commands.register_handler("bpm", self._command_handler.handle_bpm)
+        self._commands.register_handler("panic", self._handle_panic)  # Uses wrapper for additional logic
+
+        # MIDI-specific commands (remain in LoopEngine - need access to _midi)
         self._commands.register_handler("midi_port", self._handle_midi_port)
         self._commands.register_handler("midi_panic", self._handle_midi_panic)
-        self._commands.register_handler("panic", self._handle_panic)
 
     def _load_destinations(self) -> None:
         """
@@ -339,179 +366,125 @@ class LoopEngine:
 
         return CommandResult.ok()
 
-    def _handle_play(self, payload: dict[str, Any]) -> CommandResult:
-        """Start or resume playback (like video player play button)"""
-        try:
-            # Validate payload with Pydantic
-            cmd = PlayCommand(**payload)
-        except ValidationError as e:
-            return CommandResult.error(f"Invalid play command: {e}")
+    def handle_play(self, payload: dict[str, Any]) -> CommandResult:
+        """
+        Start or resume playback (like video player play button).
 
-        current_state = self.state.playback_state
+        Public API for playback control - can be called directly from routes.
+        Wrapper around CommandHandler with additional engine-specific logic.
+        """
+        # Remember state before change
+        old_state = self.state.playback_state
 
-        if current_state == PlaybackState.PLAYING:
-            # Already playing, do nothing
-            return CommandResult.ok("Already playing")
+        # Delegate to command handler
+        result = self._command_handler.handle_play(payload)
 
-        if current_state == PlaybackState.STOPPED:
-            # Starting from stopped state - position already at 0
-            self.state.playback_state = PlaybackState.PLAYING
+        if result.success and old_state != PlaybackState.PLAYING:
+            # Send appropriate MIDI clock message (engine-specific)
             if self._midi_enabled:
-                self._clock_generator.send_start()
-            logger.info("Playback started from beginning")
+                if old_state == PlaybackState.STOPPED:
+                    self._clock_generator.send_start()
+                elif old_state == PlaybackState.PAUSED:
+                    self._clock_generator.send_continue()
 
-        elif current_state == PlaybackState.PAUSED:
-            # Resuming from paused state - keep current position
-            self.state.playback_state = PlaybackState.PLAYING
+            # Send status and tracks update (non-blocking)
+            self._schedule_status_update()
+            self._schedule_tracks_update()
+
+        return result
+
+    def handle_stop(self, payload: dict[str, Any]) -> CommandResult:
+        """
+        Stop playback and reset to beginning (like video player stop button).
+
+        Public API for playback control - can be called directly from routes.
+        Wrapper around CommandHandler with additional engine-specific logic.
+        """
+        # Remember state before change
+        was_playing = self.state.playback_state == PlaybackState.PLAYING
+
+        # Delegate to command handler
+        result = self._command_handler.handle_stop(payload)
+
+        if result.success:
+            # Clear note scheduler (engine-specific)
+            self._note_scheduler.clear_all()
+
+            # Send MIDI stop if was playing (engine-specific)
+            if was_playing and self._midi_enabled:
+                self._clock_generator.send_stop()
+
+            # Reset drift correction anchor (engine-specific)
+            self._step_anchor_time = None
+            self._step_count = 0
+
+            # Send status update (non-blocking)
+            self._schedule_status_update()
+
+        return result
+
+    def handle_pause(self, payload: dict[str, Any]) -> CommandResult:
+        """
+        Pause playback, maintaining position (like video player pause button).
+
+        Public API for playback control - can be called directly from routes.
+        Wrapper around CommandHandler with additional engine-specific logic.
+        """
+        # Delegate to command handler
+        result = self._command_handler.handle_pause(payload)
+
+        if result.success:
+            # Clear note scheduler (engine-specific)
+            self._note_scheduler.clear_all()
+
+            # Send MIDI stop (enables proper resume with CONTINUE)
             if self._midi_enabled:
-                self._clock_generator.send_continue()
-            logger.info(f"Playback resumed from step {self.state.position.step}")
+                self._clock_generator.send_stop()
 
-        # Send status and tracks update (non-blocking)
-        self._schedule_status_update()
-        self._schedule_tracks_update()
+            # Reset drift correction anchor (engine-specific)
+            # Will re-anchor when playback resumes
+            self._step_anchor_time = None
 
-        return CommandResult.ok()
+            # Send status update (non-blocking)
+            self._schedule_status_update()
 
-    def _handle_stop(self, payload: dict[str, Any]) -> CommandResult:
-        """Stop playback and reset to beginning (like video player stop button)"""
-        try:
-            # Validate payload with Pydantic
-            cmd = StopCommand(**payload)
-        except ValidationError as e:
-            return CommandResult.error(f"Invalid stop command: {e}")
-
-        if self.state.playback_state == PlaybackState.STOPPED:
-            # Already stopped, do nothing
-            return CommandResult.ok("Already stopped")
-
-        # Clear note scheduler
-        self._note_scheduler.clear_all()
-
-        # Send MIDI stop if was playing
-        if self.state.playback_state == PlaybackState.PLAYING and self._midi_enabled:
-            self._clock_generator.send_stop()
-
-        # Reset position and set state
-        self.state.reset_position()
-        self.state.playback_state = PlaybackState.STOPPED
-
-        # Reset drift correction anchor (Phase 1)
-        self._step_anchor_time = None
-        self._step_count = 0
-
-        logger.info("Playback stopped, position reset")
-
-        # Send status update (non-blocking)
-        self._schedule_status_update()
-
-        return CommandResult.ok()
-
-    def _handle_pause(self, payload: dict[str, Any]) -> CommandResult:
-        """Pause playback, maintaining position (like video player pause button)"""
-        try:
-            # Validate payload with Pydantic
-            cmd = PauseCommand(**payload)
-        except ValidationError as e:
-            return CommandResult.error(f"Invalid pause command: {e}")
-
-        if self.state.playback_state != PlaybackState.PLAYING:
-            # Not playing, do nothing
-            return CommandResult.ok("Not playing")
-
-        # Clear note scheduler
-        self._note_scheduler.clear_all()
-
-        # Send MIDI stop (enables proper resume with CONTINUE)
-        if self._midi_enabled:
-            self._clock_generator.send_stop()
-
-        # Set paused state (position is maintained)
-        self.state.playback_state = PlaybackState.PAUSED
-
-        # Reset drift correction anchor (Phase 1)
-        # Will re-anchor when playback resumes
-        self._step_anchor_time = None
-
-        logger.info(f"Playback paused at step {self.state.position.step}")
-
-        # Send status update (non-blocking)
-        self._schedule_status_update()
-
-        return CommandResult.ok()
+        return result
 
     def _handle_mute(self, payload: dict[str, Any]) -> CommandResult:
-        """Mute/unmute a track"""
-        try:
-            # Validate payload with Pydantic
-            cmd = MuteCommand(**payload)
-        except ValidationError as e:
-            return CommandResult.error(f"Invalid mute command: {e}")
-
-        if self.state.set_track_mute(cmd.track_id, cmd.mute):
-            logger.debug(f"Track '{cmd.track_id}' mute={cmd.mute}")
-            return CommandResult.ok()
-        else:
-            return CommandResult.error(f"Track '{cmd.track_id}' not found")
+        """Mute/unmute a track - delegates to CommandHandler"""
+        return self._command_handler.handle_mute(payload)
 
     def _handle_solo(self, payload: dict[str, Any]) -> CommandResult:
-        """Solo/unsolo a track"""
-        try:
-            # Validate payload with Pydantic
-            cmd = SoloCommand(**payload)
-        except ValidationError as e:
-            return CommandResult.error(f"Invalid solo command: {e}")
-
-        if self.state.set_track_solo(cmd.track_id, cmd.solo):
-            logger.debug(f"Track '{cmd.track_id}' solo={cmd.solo}")
-            return CommandResult.ok()
-        else:
-            return CommandResult.error(f"Track '{cmd.track_id}' not found")
+        """Solo/unsolo a track - delegates to CommandHandler"""
+        return self._command_handler.handle_solo(payload)
 
     def _handle_bpm(self, payload: dict[str, Any]) -> CommandResult:
         """
         Change BPM with proper anchor reset for smooth transitions.
 
-        When BPM changes during playback, we must reset the timing anchor
-        to prevent false drift detection. The step_duration changes but
-        the anchor was set based on the old duration, which would cause
-        large apparent drift.
-
-        Both LoopEngine (step sequencer) and ClockGenerator (MIDI clock)
-        anchors are reset to ensure synchronized smooth transitions.
-
-        A grace period is set to suppress drift reset notifications during
-        the transition, as the previous sleep may still be in progress.
+        Wrapper around CommandHandler with engine-specific drift anchor reset logic.
         """
-        try:
-            # Validate payload with Pydantic
-            cmd = BpmCommand(**payload)
-        except ValidationError as e:
-            return CommandResult.error(f"Invalid bpm command: {e}")
+        # Delegate to command handler
+        result = self._command_handler.handle_bpm(payload)
 
-        old_bpm = self.state.bpm
-        self.state.set_bpm(cmd.bpm)
+        if result.success:
+            # Reset anchors during playback to prevent false drift detection
+            # (engine-specific timing logic)
+            if self.state.playing and self._step_anchor_time is not None:
+                current_time = time.perf_counter()
+                self._step_anchor_time = current_time
+                self._step_count = 0
 
-        # Reset anchors during playback to prevent false drift detection
-        if self.state.playing and self._step_anchor_time is not None:
-            current_time = time.perf_counter()
-            self._step_anchor_time = current_time
-            self._step_count = 0
+                # Suppress the next drift reset notification (flag-based, not time-based)
+                # This avoids race conditions with async timing
+                self._suppress_next_drift_reset = True
 
-            # Suppress the next drift reset notification (flag-based, not time-based)
-            # This avoids race conditions with async timing
-            self._suppress_next_drift_reset = True
+                # Also reset MIDI clock anchor with suppression
+                self._clock_generator.suppress_next_drift_reset()
 
-            # Also reset MIDI clock anchor with suppression
-            self._clock_generator.suppress_next_drift_reset()
+                logger.debug("Anchors reset after BPM change (drift suppression enabled)")
 
-            logger.debug(
-                f"BPM changed {old_bpm} → {cmd.bpm}, anchors reset (drift suppression enabled)"
-            )
-        else:
-            logger.debug(f"BPM changed to {cmd.bpm}")
-
-        return CommandResult.ok()
+        return result
 
     def _handle_midi_port(self, payload: dict[str, Any]) -> CommandResult:
         """Change MIDI output port"""
@@ -562,26 +535,25 @@ class LoopEngine:
 
         Use for: Complete emergency stop of all audio output.
         """
-        try:
-            # Validate payload with Pydantic
-            cmd = PanicCommand(**payload)
-        except ValidationError as e:
-            return CommandResult.error(f"Invalid panic command: {e}")
+        # Delegate to command handler
+        result = self._command_handler.handle_panic(payload)
 
-        self._silence_all_notes()
+        if result.success:
+            # Silence all MIDI notes (engine-specific)
+            self._silence_all_notes()
 
-        # Stop playback and reset position
-        self.state.reset_position()
-        self.state.playback_state = PlaybackState.STOPPED
+            # Stop playback and reset position
+            self.state.reset_position()
+            self.state.playback_state = PlaybackState.STOPPED
 
-        # Reset drift correction anchor
-        self._step_anchor_time = None
-        self._step_count = 0
+            # Reset drift correction anchor
+            self._step_anchor_time = None
+            self._step_count = 0
 
-        logger.warning("PANIC: Emergency stop executed")
-        self._schedule_status_update()
+            logger.warning("PANIC: Emergency stop executed")
+            self._schedule_status_update()
 
-        return CommandResult.ok()
+        return result
 
     # ================================================================
     # Public API Methods
@@ -594,7 +566,7 @@ class LoopEngine:
         Returns:
             CommandResult indicating success or failure
         """
-        return self._handle_play({})
+        return self.handle_play({})
 
     def stop_playback(self) -> CommandResult:
         """
@@ -603,7 +575,7 @@ class LoopEngine:
         Returns:
             CommandResult indicating success or failure
         """
-        return self._handle_stop({})
+        return self.handle_stop({})
 
     def pause(self) -> CommandResult:
         """
@@ -612,7 +584,7 @@ class LoopEngine:
         Returns:
             CommandResult indicating success or failure
         """
-        return self._handle_pause({})
+        return self.handle_pause({})
 
     def mute_track(self, track_id: str, mute: bool = True) -> CommandResult:
         """
@@ -826,82 +798,116 @@ class LoopEngine:
                 # Warning level drift - log but continue with normal correction
                 logger.debug(f"Clock drift warning: {drift_ms:.1f}ms")
 
-            try:
-                # Check and apply pending changes at timing boundaries
-                if self.state.should_apply_pending():
-                    logger.info(f"Applying pending changes at step {self.state.position.step}")
+            # Execute current step: get messages, filter, apply hooks, send
+            await self._execute_current_step()
 
-                    # Track BPM before apply to detect changes
-                    old_bpm = self.state.bpm
+            # Wait for next step with drift correction
+            await self._wait_for_next_step()
 
-                    self.state.apply_pending_changes()
+    def _get_filtered_messages(self, current_step: int) -> list[ScheduledMessage]:
+        """
+        Get and filter messages for current step.
 
-                    # If BPM changed during apply, reset anchors and suppress drift
-                    if self.state.bpm != old_bpm:
-                        current_time = time.perf_counter()
-                        self._step_anchor_time = current_time
-                        self._step_count = 0
-                        self._suppress_next_drift_reset = True
-                        self._clock_generator.suppress_next_drift_reset()
-                        logger.debug(
-                            f"BPM changed during apply {old_bpm} → {self.state.bpm}, "
-                            "anchors reset (drift suppression enabled)"
-                        )
+        Returns:
+            Filtered list of ScheduledMessage for current step
+        """
+        if not self._destinations_loaded or self._message_scheduler.message_count == 0:
+            return []
 
-                    # Send updated track info for Monitor display
-                    await self._publisher.send_tracks(self._get_tracks_info())
+        scheduled_messages = self._message_scheduler.get_messages_at_step(current_step)
+        if not scheduled_messages:
+            return []
 
-                # === New destination-based architecture ===
-                # Process messages from MessageScheduler (if loaded)
-                if self._destinations_loaded and self._message_scheduler.message_count > 0:
-                    current_step = self.state.position.step
-                    scheduled_messages = self._message_scheduler.get_messages_at_step(current_step)
+        # Filter by mute/solo state
+        return self.state.filter_messages(scheduled_messages)
 
-                    if scheduled_messages:
-                        # Filter by mute/solo state (NEW)
-                        scheduled_messages = self.state.filter_messages(scheduled_messages)
+    def _apply_hooks(
+        self, messages: list[ScheduledMessage], current_step: int
+    ) -> list[ScheduledMessage]:
+        """
+        Apply extension hooks to messages.
 
-                        if scheduled_messages:  # Only log/send if messages remain after filtering
-                            logger.debug(
-                                f"Step {current_step}: sending {len(scheduled_messages)} "
-                                "scheduled messages via destination router"
-                            )
+        Args:
+            messages: List of scheduled messages
+            current_step: Current step number
 
-                            # Apply extension hooks (e.g., cps injection)
-                            # Extensions modify messages just before sending
-                            for hook in self._before_send_hooks:
-                                scheduled_messages = hook(
-                                    scheduled_messages,
-                                    self.state.bpm,
-                                    current_step
-                                )
+        Returns:
+            Modified messages after applying all hooks
+        """
+        for hook in self._before_send_hooks:
+            messages = hook(messages, self.state.bpm, current_step)
+        return messages
 
-                            self._destination_router.send_messages(scheduled_messages)
+    def _send_messages(self, messages: list[ScheduledMessage], current_step: int) -> None:
+        """
+        Send messages to destination router.
 
-                # Publish position on beat boundaries (quarter notes) to reduce traffic
-                if self.state.position.step % 4 == 0:
-                    await self._publisher.send_position(
-                        self.state.position.to_dict(),
-                        bpm=self.state.bpm,
-                        transport=self.state.playback_state.value,
-                    )
+        Args:
+            messages: List of scheduled messages to send
+            current_step: Current step number (for logging)
+        """
+        if messages:
+            logger.debug(
+                f"Step {current_step}: sending {len(messages)} "
+                "scheduled messages via destination router"
+            )
+            self._destination_router.send_messages(messages)
 
-                # Send tracks info at bar boundaries for Monitor page sync
-                if self.state.position.step % 16 == 0:
-                    await self._publisher.send_tracks(self._get_tracks_info())
+    async def _publish_periodic_updates(self, current_step: int) -> None:
+        """
+        Publish periodic updates (position, tracks info).
 
-            except Exception as e:
-                logger.error(f"Step processing error: {e}\n{traceback.format_exc()}")
-                await self._publisher.send_error("STEP_ERROR", str(e))
+        Args:
+            current_step: Current step number
+        """
+        # Publish position on beat boundaries (quarter notes) to reduce traffic
+        if current_step % 4 == 0:
+            await self._publisher.send_position(
+                self.state.position.to_dict(),
+                bpm=self.state.bpm,
+                transport=self.state.playback_state.value,
+            )
 
-            # Advance step count and position
-            self._step_count += 1
-            self.state.advance_step()
+        # Send tracks info at bar boundaries for Monitor page sync
+        if current_step % 16 == 0:
+            await self._publisher.send_tracks(self._get_tracks_info())
 
-            # Drift-corrected wait: calculate expected time for next step
-            expected_next = self._step_anchor_time + (self._step_count * step_duration)
-            wait_time = max(0, expected_next - time.perf_counter())
-            await asyncio.sleep(wait_time)
+    async def _execute_current_step(self) -> None:
+        """Execute processing for current step."""
+        try:
+            current_step = self.state.position.step
+
+            # Get and filter messages
+            messages = self._get_filtered_messages(current_step)
+
+            if messages:
+                # Apply extension hooks
+                messages = self._apply_hooks(messages, current_step)
+                # Send to destination router
+                self._send_messages(messages, current_step)
+
+            # Publish periodic updates
+            await self._publish_periodic_updates(current_step)
+
+        except Exception as e:
+            logger.error(f"Step processing error: {e}\n{traceback.format_exc()}")
+            await self._publisher.send_error("STEP_ERROR", str(e))
+
+    async def _wait_for_next_step(self) -> None:
+        """
+        Wait for next step with drift correction.
+
+        Advances step count and position, then waits until expected time.
+        """
+        # Advance step count and position
+        self._step_count += 1
+        self.state.advance_step()
+
+        # Drift-corrected wait: calculate expected time for next step
+        step_duration = self.state.step_duration
+        expected_next = self._step_anchor_time + (self._step_count * step_duration)
+        wait_time = max(0, expected_next - time.perf_counter())
+        await asyncio.sleep(wait_time)
 
     async def _handle_drift_reset(self, drift_ms: float, current_time: float) -> None:
         """
@@ -1030,21 +1036,15 @@ class LoopEngine:
         await self._publisher.send_tracks(tracks_info)
 
     def _get_tracks_info(self) -> list[dict[str, Any]]:
-        """Build track info list for Monitor display (v5)"""
-        tracks_info: list[dict[str, Any]] = []
-        session = self.state.get_effective()
+        """
+        Build track info list for Monitor display.
 
-        for track_id, track in self.state.tracks.items():
-            # Get sequence for this track
-            sequence = session.sequences.get(track_id)
-            events = list(sequence) if sequence else []
-
-            tracks_info.append({
-                "track_id": track_id,
-                "sound": track.params.s or track_id,
-                "pattern": self._events_to_pattern(events),
-            })
-        return tracks_info
+        Note: After Phase 1-8 architecture unification, track/sequence structure
+        no longer exists in RuntimeState. This method returns empty list.
+        Monitor display should be updated to work with ScheduledMessageBatch architecture.
+        """
+        # Legacy CompiledSession architecture removed - return empty list
+        return []
 
     @staticmethod
     def _events_to_pattern(events: Any) -> str:
@@ -1073,7 +1073,7 @@ class LoopEngine:
         await self._publisher.send_status(
             transport=self.state.playback_state.value,
             bpm=self.state.bpm,
-            active_tracks=list(self.state.get_active_tracks().keys())
+            active_tracks=self.state.get_active_track_ids()
         )
 
     # ================================================================

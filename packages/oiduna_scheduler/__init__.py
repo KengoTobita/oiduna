@@ -5,13 +5,13 @@ Handles message scheduling and routing to destinations.
 Uses lightweight dataclasses for runtime performance.
 """
 
-from scheduler_models import (
+from oiduna_scheduler.scheduler_models import (
     ScheduledMessage,
     ScheduledMessageBatch,
 )
-from scheduler import MessageScheduler
-from router import DestinationRouter
-from senders import OscDestinationSender, MidiDestinationSender
+from oiduna_scheduler.scheduler import MessageScheduler
+from oiduna_scheduler.router import DestinationRouter
+from oiduna_scheduler.senders import OscDestinationSender, MidiDestinationSender
 
 __all__ = [
     "ScheduledMessage",

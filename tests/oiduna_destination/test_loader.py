@@ -4,8 +4,8 @@ import pytest
 import tempfile
 from pathlib import Path
 
-from loader import load_destinations, load_destinations_from_file
-from destination_models import OscDestinationConfig, MidiDestinationConfig
+from oiduna_destination.loader import load_destinations, load_destinations_from_file
+from oiduna_destination.destination_models import OscDestinationConfig, MidiDestinationConfig
 
 
 class TestLoadDestinations:

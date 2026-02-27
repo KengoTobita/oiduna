@@ -279,7 +279,7 @@ class TestDriftResetIntegration:
     ):
         """Stop command should reset anchor (stats are preserved for monitoring)."""
         # Start playing and set up anchor
-        test_engine._handle_play({})
+        test_engine.handle_play({})
         test_engine._step_anchor_time = time.perf_counter()
         test_engine._step_count = 50
 
@@ -288,7 +288,7 @@ class TestDriftResetIntegration:
         assert test_engine._drift_stats["reset_count"] == 1
 
         # Stop playback
-        test_engine._handle_stop({})
+        test_engine.handle_stop({})
 
         # Anchor should be reset
         assert test_engine._step_anchor_time is None
@@ -303,12 +303,12 @@ class TestDriftResetIntegration:
         test_engine: LoopEngine,
     ):
         """Pause should reset anchor but preserve position."""
-        test_engine._handle_play({})
+        test_engine.handle_play({})
         test_engine._step_anchor_time = time.perf_counter()
         test_engine._step_count = 30
         test_engine.state.position.step = 30
 
-        test_engine._handle_pause({})
+        test_engine.handle_pause({})
 
         # Anchor reset, position preserved
         assert test_engine._step_anchor_time is None
@@ -339,7 +339,7 @@ class TestDriftResetIntegration:
         apparent drift and trigger an unwanted drift reset.
         """
         # Start playing
-        test_engine._handle_play({})
+        test_engine.handle_play({})
         test_engine._step_anchor_time = time.perf_counter() - 10.0  # 10 seconds ago
         test_engine._step_count = 80  # 80 steps at old BPM
 
@@ -366,7 +366,7 @@ class TestDriftResetIntegration:
         must have their anchors reset to prevent false drift detection.
         """
         # Start playing
-        test_engine._handle_play({})
+        test_engine.handle_play({})
         test_engine._step_anchor_time = time.perf_counter() - 10.0
 
         # Set up ClockGenerator state (simulating running MIDI clock)
@@ -466,7 +466,7 @@ class TestBpmChangeDriftSuppression:
     def test_bpm_change_sets_suppression_flag(self, test_engine: LoopEngine):
         """BPM change during playback should set suppression flag."""
         # Start playing
-        test_engine._handle_play({})
+        test_engine.handle_play({})
         test_engine._step_anchor_time = time.perf_counter()
         test_engine._step_count = 10
 

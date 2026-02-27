@@ -63,7 +63,7 @@ async def start_playback(
 ) -> dict:
     """Start playback"""
     engine = loop_service.get_engine()
-    result = engine._handle_play({})
+    result = engine.handle_play({})
 
     if not result.success:
         raise HTTPException(status_code=500, detail=result.message)
@@ -77,7 +77,7 @@ async def stop_playback(
 ) -> dict:
     """Stop playback and reset position"""
     engine = loop_service.get_engine()
-    result = engine._handle_stop({})
+    result = engine.handle_stop({})
 
     if not result.success:
         raise HTTPException(status_code=500, detail=result.message)
@@ -91,7 +91,7 @@ async def pause_playback(
 ) -> dict:
     """Pause playback"""
     engine = loop_service.get_engine()
-    result = engine._handle_pause({})
+    result = engine.handle_pause({})
 
     if not result.success:
         raise HTTPException(status_code=500, detail=result.message)

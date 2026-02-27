@@ -5,10 +5,9 @@ Replaces StepProcessor's timing logic with generic message scheduling.
 """
 
 from __future__ import annotations
-from typing import Dict, List
 from collections import defaultdict
 
-from scheduler_models import ScheduledMessage, ScheduledMessageBatch
+from oiduna_scheduler.scheduler_models import ScheduledMessage, ScheduledMessageBatch
 
 
 class MessageScheduler:

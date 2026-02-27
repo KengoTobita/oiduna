@@ -3,12 +3,12 @@ Destination router - sends messages to appropriate destinations.
 """
 
 from __future__ import annotations
-from typing import Dict, List, Protocol, Optional
+from typing import Protocol
 from collections import defaultdict
 import logging
 
-from scheduler_models import ScheduledMessage
-from validators import OscValidator, MidiValidator
+from oiduna_scheduler.scheduler_models import ScheduledMessage
+from oiduna_scheduler.validators import OscValidator, MidiValidator
 
 logger = logging.getLogger(__name__)
 

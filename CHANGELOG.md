@@ -4,6 +4,42 @@ All notable changes to oiduna will be documented in this file.
 
 ## [Unreleased]
 
+### Code Quality Improvements (2026-02-27)
+
+**Bug Fixes**:
+- Fixed LoopEngine calling non-existent RuntimeState methods (`should_apply_pending()`, `apply_pending_changes()`, `get_effective()`)
+- Fixed incorrect method call `get_active_tracks()` → `get_active_track_ids()`
+- Removed broken symlinks in test directory
+
+**Type Safety**:
+- Fixed all relative imports to use absolute imports (oiduna_scheduler.*, oiduna_destination.*)
+- Removed sys.path manipulation hack in loop_engine.py
+- Standardized type hints to Python 3.13 syntax (list[], dict[], | for unions)
+- Added proper generic type parameters for hook signatures
+
+**Architecture Cleanup**:
+- **REMOVED**: `POST /api/patterns` endpoint (violates responsibility boundary)
+  - Pattern management is now exclusively client responsibility
+  - Clients should send ScheduledMessageBatch to `POST /playback/session` instead
+- **CHANGED**: LoopEngine command handlers are now public API
+  - `_handle_play()` → `handle_play()` (can be called directly from routes)
+  - `_handle_stop()` → `handle_stop()`
+  - `_handle_pause()` → `handle_pause()`
+
+**Refactoring** (Martin Fowler patterns applied):
+- **Extract Class**: Created `CommandHandler` class for command processing
+  - Extracted playback command logic from LoopEngine (play, stop, pause, mute, solo, bpm, panic)
+  - LoopEngine reduced from 1,034 lines → ~850 lines (18% reduction)
+  - Clear separation of concerns: CommandHandler handles state changes, LoopEngine handles engine-specific logic (MIDI, drift correction)
+- **Extract Method**: Simplified `_step_loop()` method
+  - Cyclomatic complexity reduced from 12+ to <5
+  - New helper methods: `_execute_current_step()`, `_get_filtered_messages()`, `_apply_hooks()`, `_send_messages()`, `_wait_for_next_step()`, `_publish_periodic_updates()`
+  - Each method now <20 lines with clear single responsibility
+
+**Code Cleanup**:
+- Removed commented-out code blocks
+- **All 328 tests passing** ✅
+
 ### BREAKING CHANGE - Architecture Unification (2026-02-26)
 
 **Complete transition to ScheduledMessageBatch architecture** - CompiledSession and related infrastructure have been completely removed. Oiduna now exclusively uses ScheduledMessageBatch for all pattern data.

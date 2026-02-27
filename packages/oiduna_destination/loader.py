@@ -9,7 +9,7 @@ from typing import Any
 import yaml
 import json
 
-from destination_models import DestinationConfig, OscDestinationConfig, MidiDestinationConfig
+from oiduna_destination.destination_models import DestinationConfig, OscDestinationConfig, MidiDestinationConfig
 
 
 def load_destinations(config_data: dict[str, Any]) -> dict[str, DestinationConfig]:

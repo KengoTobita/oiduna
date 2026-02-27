@@ -8,12 +8,12 @@ Design principle: Use Pydantic for validation at config-load time.
 Runtime messages use lightweight dataclasses (see oiduna_scheduler).
 """
 
-from destination_models import (
+from oiduna_destination.destination_models import (
     DestinationConfig,
     OscDestinationConfig,
     MidiDestinationConfig,
 )
-from loader import load_destinations, load_destinations_from_file
+from oiduna_destination.loader import load_destinations, load_destinations_from_file
 
 __all__ = [
     "DestinationConfig",

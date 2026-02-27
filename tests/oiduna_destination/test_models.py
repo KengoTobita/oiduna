@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from destination_models import (
+from oiduna_destination.destination_models import (
     OscDestinationConfig,
     MidiDestinationConfig,
 )

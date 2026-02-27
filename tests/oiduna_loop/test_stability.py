@@ -139,7 +139,7 @@ class TestLongRunningTiming:
         """Run step loop for 10 seconds and verify timing accuracy."""
         engine = stability_engine.engine
         engine.state.set_bpm(120)  # 125ms per step
-        engine._handle_play({})
+        engine.handle_play({})
 
         # Track timing manually
         step_intervals: list[float] = []
@@ -174,7 +174,7 @@ class TestLongRunningTiming:
 
             await asyncio.sleep(0.001)
 
-        engine._handle_stop({})
+        engine.handle_stop({})
 
         # Analyze results
         assert len(step_intervals) > 0, "No steps recorded"
@@ -208,7 +208,7 @@ class TestLongRunningTiming:
         """Run step loop for 30 seconds - extended stability test."""
         engine = stability_engine.engine
         engine.state.set_bpm(140)  # Faster BPM
-        engine._handle_play({})
+        engine.handle_play({})
 
         step_count = 0
         start_time = time.perf_counter()
@@ -234,7 +234,7 @@ class TestLongRunningTiming:
 
             await asyncio.sleep(0.001)
 
-        engine._handle_stop({})
+        engine.handle_stop({})
 
         drift_stats = engine.get_drift_stats()
 
@@ -272,7 +272,7 @@ class TestBPMChangeStress:
         """Rapidly change BPM while running and verify stability."""
         engine = stability_engine.engine
         engine.state.set_bpm(120)
-        engine._handle_play({})
+        engine.handle_play({})
         engine._step_anchor_time = time.perf_counter()
         engine._step_count = 0
 
@@ -311,7 +311,7 @@ class TestBPMChangeStress:
             except Exception as e:
                 errors.append(f"Error at BPM {bpm}: {e}")
 
-        engine._handle_stop({})
+        engine.handle_stop({})
 
         assert len(errors) == 0, f"Errors during BPM changes: {errors}"
 
@@ -331,7 +331,7 @@ class TestBPMChangeStress:
     ):
         """Test extreme BPM values at boundaries."""
         engine = stability_engine.engine
-        engine._handle_play({})
+        engine.handle_play({})
         engine._step_anchor_time = time.perf_counter()
 
         # Test boundary values (clamped to 1.0-999.0 by SessionState)
@@ -347,7 +347,7 @@ class TestBPMChangeStress:
             assert engine._step_anchor_time is not None
             await asyncio.sleep(0.01)
 
-        engine._handle_stop({})
+        engine.handle_stop({})
         print("\n=== Extreme BPM Test Passed ===")
 
 
@@ -368,7 +368,7 @@ class TestCPUSpikeRecovery:
         """Simulate CPU spike and verify drift reset triggers correctly."""
         engine = stability_engine.engine
         engine.state.set_bpm(120)
-        engine._handle_play({})
+        engine.handle_play({})
 
         start_time = time.perf_counter()
         engine._step_anchor_time = start_time
@@ -410,7 +410,7 @@ class TestCPUSpikeRecovery:
 
             await asyncio.sleep(0.001)
 
-        engine._handle_stop({})
+        engine.handle_stop({})
 
         drift_stats = engine.get_drift_stats()
 
@@ -433,7 +433,7 @@ class TestCPUSpikeRecovery:
         """Test recovery from multiple CPU spikes."""
         engine = stability_engine.engine
         engine.state.set_bpm(120)
-        engine._handle_play({})
+        engine.handle_play({})
 
         start_time = time.perf_counter()
         engine._step_anchor_time = start_time
@@ -471,7 +471,7 @@ class TestCPUSpikeRecovery:
 
             await asyncio.sleep(0.001)
 
-        engine._handle_stop({})
+        engine.handle_stop({})
 
         drift_stats = engine.get_drift_stats()
 
@@ -511,7 +511,7 @@ class TestConcurrentLoops:
         )
         engine._register_handlers()
         engine.state.set_bpm(120)
-        engine._handle_play({})
+        engine.handle_play({})
 
         step_count = 0
         pulse_count = 0
@@ -558,7 +558,7 @@ class TestConcurrentLoops:
         # Run both loops concurrently
         await asyncio.gather(step_loop(), clock_loop())
 
-        engine._handle_stop({})
+        engine.handle_stop({})
 
         # Verify ratio: 6 pulses per step (24 PPQ / 4 steps per quarter)
         expected_ratio = 6.0
@@ -609,7 +609,7 @@ class TestHighEventDensity:
         session = create_dense_session(num_tracks=16)
         engine._handle_compile(session)
         engine.state.set_bpm(140)  # Fast BPM
-        engine._handle_play({})
+        engine.handle_play({})
 
         start_time = time.perf_counter()
         engine._step_anchor_time = start_time
@@ -644,7 +644,7 @@ class TestHighEventDensity:
 
             await asyncio.sleep(0.001)
 
-        engine._handle_stop({})
+        engine.handle_stop({})
 
         drift_stats = engine.get_drift_stats()
 
@@ -683,7 +683,7 @@ class TestHighEventDensity:
         session = create_dense_session(num_tracks=4)
         engine._handle_compile(session)
         engine.state.set_bpm(120)
-        engine._handle_play({})
+        engine.handle_play({})
 
         engine._step_anchor_time = time.perf_counter()
         engine._step_count = 0
@@ -709,7 +709,7 @@ class TestHighEventDensity:
 
             await asyncio.sleep(0.01)
 
-        engine._handle_stop({})
+        engine.handle_stop({})
 
         assert len(errors) == 0, f"Errors during playback: {errors}"
         assert compile_count >= 5, f"Not enough recompiles: {compile_count}"
@@ -749,7 +749,7 @@ class TestStabilitySummary:
 
         # 1. Basic timing (2s)
         engine.state.set_bpm(120)
-        engine._handle_play({})
+        engine.handle_play({})
         engine._step_anchor_time = time.perf_counter()
         engine._step_count = 0
 
@@ -764,10 +764,10 @@ class TestStabilitySummary:
             await asyncio.sleep(0.001)
 
         results["timing"] = engine._drift_stats["reset_count"] == 0
-        engine._handle_stop({})
+        engine.handle_stop({})
 
         # 2. BPM changes
-        engine._handle_play({})
+        engine.handle_play({})
         engine._step_anchor_time = time.perf_counter()
         engine._clock_generator._clock_anchor_time = time.perf_counter()
 
@@ -780,10 +780,10 @@ class TestStabilitySummary:
             await asyncio.sleep(0.01)
 
         results["bpm_changes"] = bpm_errors == 0
-        engine._handle_stop({})
+        engine.handle_stop({})
 
         # 3. CPU spike recovery
-        engine._handle_play({})
+        engine.handle_play({})
         engine._step_anchor_time = time.perf_counter()
         engine._step_count = 0
         engine._drift_stats["reset_count"] = 0
@@ -798,7 +798,7 @@ class TestStabilitySummary:
             await engine._handle_drift_reset(drift_ms, current)
 
         results["spike_recovery"] = True  # Just verify no crash
-        engine._handle_stop({})
+        engine.handle_stop({})
 
         # Print results
         print("\n=== Comprehensive Stability Check ===")
