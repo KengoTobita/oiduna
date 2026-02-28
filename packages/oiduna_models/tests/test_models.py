@@ -3,6 +3,7 @@ Unit tests for Oiduna data models.
 """
 
 import pytest
+from pydantic import ValidationError
 from oiduna_models import (
     Session,
     Track,
@@ -12,7 +13,7 @@ from oiduna_models import (
     Environment,
     IDGenerator,
 )
-from oiduna_destination.destination_models import OscDestinationConfig
+from oiduna_models import OscDestinationConfig
 
 
 class TestEvent:
@@ -31,15 +32,15 @@ class TestEvent:
 
     def test_event_step_validation(self):
         """Test step must be 0-255."""
-        with pytest.raises(Exception):  # Pydantic ValidationError
+        with pytest.raises(ValidationError, match="step"):
             Event(step=-1, cycle=0.0, params={})
 
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError, match="step"):
             Event(step=256, cycle=0.0, params={})
 
     def test_event_cycle_validation(self):
         """Test cycle must be >= 0."""
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError, match="cycle"):
             Event(step=0, cycle=-1.0, params={})
 
 
@@ -104,6 +105,52 @@ class TestTrack:
         assert track.base_params == {}
         assert track.patterns == {}
 
+    @pytest.mark.parametrize("destination_id,description", [
+        ("superdirt", "alphanumeric"),
+        ("super_dirt", "with underscore"),
+        ("osc-synth", "with hyphen"),
+        ("super_dirt-v1", "with underscore and hyphen"),
+    ])
+    def test_valid_destination_id_formats(self, destination_id, description):
+        """Test various valid destination ID formats."""
+        track = Track(
+            track_id="t1",
+            track_name="test",
+            destination_id=destination_id,
+            client_id="c1"
+        )
+        assert track.destination_id == destination_id
+
+    def test_invalid_destination_id_with_space(self):
+        """Test destination_id with space raises ValueError."""
+        with pytest.raises(ValueError, match="alphanumeric"):
+            Track(
+                track_id="t1",
+                track_name="kick",
+                destination_id="super dirt",
+                client_id="c1"
+            )
+
+    def test_invalid_destination_id_with_special_char(self):
+        """Test destination_id with special character raises ValueError."""
+        with pytest.raises(ValueError, match="alphanumeric"):
+            Track(
+                track_id="t1",
+                track_name="kick",
+                destination_id="dest!",
+                client_id="c1"
+            )
+
+    def test_invalid_destination_id_error_message(self):
+        """Test error message includes helpful examples."""
+        with pytest.raises(ValueError, match="superdirt.*midi_1.*osc-synth"):
+            Track(
+                track_id="t1",
+                track_name="kick",
+                destination_id="invalid dest!",
+                client_id="c1"
+            )
+
 
 class TestClientInfo:
     """Test ClientInfo model."""
@@ -153,10 +200,10 @@ class TestEnvironment:
 
     def test_bpm_validation(self):
         """Test BPM range validation."""
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError, match="bpm"):
             Environment(bpm=10.0)  # Too low
 
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError, match="bpm"):
             Environment(bpm=1000.0)  # Too high
 
 

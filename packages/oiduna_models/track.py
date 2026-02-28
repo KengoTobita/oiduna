@@ -6,7 +6,7 @@ to all events in their patterns.
 """
 
 from typing import Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from .pattern import Pattern
 
 
@@ -70,6 +70,29 @@ class Track(BaseModel):
         default_factory=dict,
         description="Patterns in this track (key = pattern_id)"
     )
+
+    @field_validator("destination_id")
+    @classmethod
+    def validate_destination_id_format(cls, v: str) -> str:
+        """
+        Validate destination ID format (alphanumeric with _ or -).
+
+        Args:
+            v: The destination_id to validate
+
+        Returns:
+            The validated destination_id
+
+        Raises:
+            ValueError: If destination_id contains invalid characters
+        """
+        if not v.replace("_", "").replace("-", "").isalnum():
+            raise ValueError(
+                f"Destination ID must be alphanumeric with underscores or hyphens. "
+                f"Got: '{v}'. "
+                f"Valid examples: 'superdirt', 'midi_1', 'osc-synth'"
+            )
+        return v
 
     model_config = {
         "json_schema_extra": {

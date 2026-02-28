@@ -1,6 +1,6 @@
-# Layer 5: データ層 (Data Models & Configuration)
+# Layer 5: データ層 (Foundation) - Data Models & Configuration
 
-**パッケージ**: `oiduna_models`, `oiduna_destination`
+**パッケージ**: `oiduna_models`
 
 **最終更新**: 2026-03-01
 
@@ -8,25 +8,35 @@
 
 ## 概要
 
-データ層はOidunaアーキテクチャの基盤であり、すべてのデータ構造の定義とバリデーションを担当します。
+データ層はOidunaアーキテクチャの**Foundation（基盤）**であり、すべての層が依存するデータ構造の定義とバリデーションを担当します。
+
+### "Foundation"としてのLayer 5
+
+Layer 5は他の層への「データフロー」ではなく、システム全体を支える**基盤**として機能します:
+
+- ✅ すべての層がこの層のモデルを使用
+- ✅ 他のどの層にも依存しない（最下層）
+- ✅ ビジネスロジックを含まない（純粋なデータ定義）
+- ✅ 言語非依存な設計（JSON Schema生成可能）
+
+この"Foundation"概念により、データモデルは単なる「通過点」ではなく、アーキテクチャ全体の**土台**として位置づけられます。
 
 ### 責任
 
 - ✅ ビジネスドメインのデータ構造定義
 - ✅ Pydanticによる型安全性とバリデーション
 - ✅ JSONシリアライズ・デシリアライズ
-- ✅ デスティネーション設定の管理
+- ✅ デスティネーション設定の管理（OSC/MIDI）
 - ❌ ビジネスロジック（Layer 2に任せる）
 - ❌ データの永続化（将来的にDBレイヤーが担当）
 
 ### 依存関係
 
 ```
-oiduna_models → oiduna_destination
-oiduna_destination → なし（完全に独立）
+oiduna_models → なし（完全に独立）
 ```
 
-**設計原則**: データ層は他のどの層にも依存しない（最下層）
+**設計原則**: データ層は他のどの層にも依存しない（最下層・Foundation）
 
 ---
 
@@ -37,14 +47,16 @@ oiduna_destination → なし（完全に独立）
 **ディレクトリ構造**:
 ```
 oiduna_models/
-├── __init__.py          # 主要モデルのエクスポート
-├── session.py           # Session
-├── track.py             # Track
-├── pattern.py           # Pattern
-├── event.py             # Event
-├── client_info.py       # ClientInfo
-├── environment.py       # Environment
-└── id_generator.py      # IDGenerator
+├── __init__.py            # 主要モデルのエクスポート
+├── session.py             # Session
+├── track.py               # Track
+├── pattern.py             # Pattern
+├── events.py              # Event
+├── client.py              # ClientInfo
+├── environment.py         # Environment
+├── id_generator.py        # IDGenerator
+├── destination_models.py  # OSC/MIDI送信先設定
+└── loader.py              # YAML設定読み込み
 ```
 
 **主要モデル**:
@@ -268,23 +280,11 @@ gen.next_track_id()    # → "track_002"
 gen.next_pattern_id()  # → "pattern_001"
 ```
 
----
+#### 8. DestinationConfig（統合）
 
-### oiduna_destination
+OSC/MIDI送信先の設定モデル。
 
-**ディレクトリ構造**:
-```
-oiduna_destination/
-├── __init__.py
-├── destination_models.py   # OscDestinationConfig, MidiDestinationConfig
-└── loader.py               # YAMLからの読み込み
-```
-
-**主要モデル**:
-
-#### 1. OscDestinationConfig
-OSC送信先（SuperDirt等）の設定。
-
+**OscDestinationConfig**:
 ```python
 class OscDestinationConfig(BaseModel):
     """OSC送信先設定"""
@@ -295,7 +295,7 @@ class OscDestinationConfig(BaseModel):
     address: str
 ```
 
-**例**:
+**使用例**:
 ```python
 superdirt = OscDestinationConfig(
     id="superdirt",
@@ -306,19 +306,7 @@ superdirt = OscDestinationConfig(
 )
 ```
 
-**YAML設定例**:
-```yaml
-destinations:
-  - id: superdirt
-    type: osc
-    host: 127.0.0.1
-    port: 57120
-    address: /dirt/play
-```
-
-#### 2. MidiDestinationConfig
-MIDI機器の設定。
-
+**MidiDestinationConfig**:
 ```python
 class MidiDestinationConfig(BaseModel):
     """MIDI送信先設定"""
@@ -328,7 +316,7 @@ class MidiDestinationConfig(BaseModel):
     channel: int = 1
 ```
 
-**例**:
+**使用例**:
 ```python
 volca = MidiDestinationConfig(
     id="volca",
@@ -338,16 +326,51 @@ volca = MidiDestinationConfig(
 )
 ```
 
+**Union型**:
+```python
+DestinationConfig = Union[OscDestinationConfig, MidiDestinationConfig]
+```
+
 **YAML設定例**:
 ```yaml
 destinations:
-  - id: volca
+  superdirt:
+    id: superdirt
+    type: osc
+    host: 127.0.0.1
+    port: 57120
+    address: /dirt/play
+  volca:
+    id: volca
     type: midi
     port_name: "Volca Keys"
     channel: 1
 ```
 
----
+#### 9. Destination Loader
+
+YAML/JSONファイルから設定を読み込むユーティリティ。
+
+```python
+from oiduna_models import load_destinations, load_destinations_from_file
+
+# ファイルから読み込み
+destinations = load_destinations_from_file("destinations.yaml")
+
+# 辞書から読み込み
+config = {
+    "destinations": {
+        "superdirt": {
+            "id": "superdirt",
+            "type": "osc",
+            "host": "127.0.0.1",
+            "port": 57120,
+            "address": "/dirt/play"
+        }
+    }
+}
+destinations = load_destinations(config)
+```
 
 ## Pydanticバリデーションの利点
 
@@ -587,5 +610,5 @@ def test_track_destination_id_format():
 
 **関連ドキュメント**:
 - `packages/oiduna_models/README.md`
-- `packages/oiduna_destination/README.md`
 - ADR-0012: Package Architecture
+- ADR-0014: oiduna_destination Merge into oiduna_models

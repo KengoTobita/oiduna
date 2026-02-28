@@ -51,16 +51,16 @@ try:
     from oiduna_scheduler.scheduler import MessageScheduler
     from oiduna_scheduler.router import DestinationRouter
     from oiduna_scheduler.senders import OscDestinationSender, MidiDestinationSender
-    from oiduna_destination.destination_models import OscDestinationConfig, MidiDestinationConfig
-    from oiduna_destination.loader import load_destinations_from_file
+    from oiduna_models import OscDestinationConfig, MidiDestinationConfig
+    from oiduna_models import load_destinations_from_file
 except ImportError:
     # Fallback for local development
     from oiduna_scheduler.scheduler_models import ScheduledMessageBatch, ScheduledMessage
     from oiduna_scheduler.scheduler import MessageScheduler
     from oiduna_scheduler.router import DestinationRouter
     from oiduna_scheduler.senders import OscDestinationSender, MidiDestinationSender
-    from oiduna_destination.destination_models import OscDestinationConfig, MidiDestinationConfig
-    from oiduna_destination.loader import load_destinations_from_file
+    from oiduna_models import OscDestinationConfig, MidiDestinationConfig
+    from oiduna_models import load_destinations_from_file
 
 logger = logging.getLogger(__name__)
 

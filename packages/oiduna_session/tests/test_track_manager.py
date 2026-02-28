@@ -2,7 +2,7 @@
 import pytest
 from oiduna_models import Session
 from oiduna_session.managers import ClientManager, DestinationManager, TrackManager
-from oiduna_destination.destination_models import OscDestinationConfig
+from oiduna_models import OscDestinationConfig
 
 
 @pytest.fixture

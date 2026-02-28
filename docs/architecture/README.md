@@ -15,7 +15,7 @@
 | **Layer 2** | [アプリケーション層](./layer-2-application.md) | `oiduna_session`, `oiduna_auth` | ビジネスロジック |
 | **Layer 3** | [コア層](./layer-3-core.md) | `oiduna_loop`, `oiduna_core` | リアルタイム実行 |
 | **Layer 4** | [ドメイン層](./layer-4-domain.md) | `oiduna_scheduler` | メッセージ最適化 |
-| **Layer 5** | [データ層](./layer-5-data.md) | `oiduna_models`, `oiduna_destination` | データ定義 |
+| **Layer 5** | [データ層（Foundation）](./layer-5-data.md) | `oiduna_models` | データ定義（基盤層） |
 
 ### その他のドキュメント
 
@@ -51,8 +51,8 @@
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
                     ↓
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Layer 5: データ層                              ┃
-┃  models, destination                           ┃
+┃ Layer 5: データ層 (Foundation)                 ┃
+┃  models                                        ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 ```
 
@@ -83,10 +83,11 @@
 - **特徴**: O(1)高速検索、送信先非依存
 - **Rust移植**: 中優先度
 
-### Layer 5: データ層
-- **目的**: データ構造定義、バリデーション
-- **特徴**: Pydantic BaseModel、型安全性
+### Layer 5: データ層（Foundation）
+- **目的**: システム全体の基盤としてのデータ構造定義とバリデーション
+- **特徴**: Pydantic BaseModel、型安全性、他の層に依存しない最下層
 - **Rust移植**: 最優先（データ構造は言語間共有）
+- **Foundation概念**: すべての層がこの層のモデルを使用
 
 ## 📖 読み方のガイド
 

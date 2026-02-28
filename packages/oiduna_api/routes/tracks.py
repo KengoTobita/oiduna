@@ -4,7 +4,7 @@ Track management routes.
 
 from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Header, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from oiduna_api.dependencies import get_container
 from oiduna_session import SessionContainer, SessionValidator
@@ -23,6 +23,29 @@ class TrackCreateRequest(BaseModel):
         default_factory=dict,
         description="Base parameters for all events"
     )
+
+    @field_validator("destination_id")
+    @classmethod
+    def validate_destination_id(cls, v: str) -> str:
+        """
+        Validate destination ID format.
+
+        Args:
+            v: The destination_id to validate
+
+        Returns:
+            The validated destination_id
+
+        Raises:
+            ValueError: If destination_id contains invalid characters
+        """
+        if not v.replace("_", "").replace("-", "").isalnum():
+            raise ValueError(
+                f"Destination ID must be alphanumeric with underscores or hyphens. "
+                f"Got: '{v}'. "
+                f"Valid examples: 'superdirt', 'midi_1', 'osc-synth'"
+            )
+        return v
 
 
 class TrackUpdateRequest(BaseModel):

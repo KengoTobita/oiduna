@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "packages"))
 from oiduna_api.main import app
 from oiduna_api.dependencies import get_container
 from oiduna_session import SessionContainer
-from oiduna_destination.destination_models import OscDestinationConfig
+from oiduna_models import OscDestinationConfig
 
 
 @pytest.fixture
@@ -107,19 +107,6 @@ class TestClientAuth:
 class TestTrackManagement:
     """Test track CRUD endpoints."""
 
-    @pytest.fixture
-    def auth_headers(self, client):
-        """Create a client and return auth headers."""
-        response = client.post(
-            "/clients/alice_001",
-            json={"client_name": "Alice"}
-        )
-        token = response.json()["token"]
-        return {
-            "X-Client-ID": "alice_001",
-            "X-Client-Token": token
-        }
-
     def test_create_track(self, client, auth_headers):
         """Test creating a track."""
         response = client.post(
@@ -149,6 +136,64 @@ class TestTrackManagement:
             }
         )
         assert response.status_code == 400
+
+    def test_create_track_invalid_destination_format_with_space(self, client, auth_headers):
+        """Test creating track with space in destination_id fails with 422."""
+        response = client.post(
+            "/tracks/track_001",
+            headers=auth_headers,
+            json={
+                "track_name": "kick",
+                "destination_id": "super dirt",
+                "base_params": {}
+            }
+        )
+        assert response.status_code == 422
+        # Check that validation error message contains helpful info
+        detail = response.json()["detail"]
+        assert any("alphanumeric" in str(err) for err in detail)
+
+    def test_create_track_invalid_destination_format_with_special_char(self, client, auth_headers):
+        """Test creating track with special char in destination_id fails with 422."""
+        response = client.post(
+            "/tracks/track_001",
+            headers=auth_headers,
+            json={
+                "track_name": "kick",
+                "destination_id": "dest!",
+                "base_params": {}
+            }
+        )
+        assert response.status_code == 422
+        detail = response.json()["detail"]
+        assert any("alphanumeric" in str(err) for err in detail)
+
+    def test_create_track_valid_destination_format_succeeds(self, client, auth_headers):
+        """Test creating track with valid destination_id format succeeds."""
+        response = client.post(
+            "/tracks/track_001",
+            headers=auth_headers,
+            json={
+                "track_name": "kick",
+                "destination_id": "superdirt",
+                "base_params": {}
+            }
+        )
+        assert response.status_code == 201
+
+    def test_create_track_valid_format_nonexistent_destination_returns_400(self, client, auth_headers):
+        """Test valid format but nonexistent destination returns 400 (not 422)."""
+        response = client.post(
+            "/tracks/track_001",
+            headers=auth_headers,
+            json={
+                "track_name": "snare",
+                "destination_id": "osc-synth",  # Valid format, but doesn't exist
+                "base_params": {}
+            }
+        )
+        assert response.status_code == 400
+        assert "does not exist" in response.json()["detail"]
 
     def test_list_tracks(self, client, auth_headers):
         """Test listing tracks."""
@@ -215,29 +260,6 @@ class TestTrackManagement:
 class TestPatternManagement:
     """Test pattern CRUD endpoints."""
 
-    @pytest.fixture
-    def auth_headers_with_track(self, client):
-        """Create client and track, return auth headers."""
-        # Create client
-        response = client.post(
-            "/clients/alice_001",
-            json={"client_name": "Alice"}
-        )
-        token = response.json()["token"]
-        headers = {
-            "X-Client-ID": "alice_001",
-            "X-Client-Token": token
-        }
-
-        # Create track
-        client.post(
-            "/tracks/track_001",
-            headers=headers,
-            json={"track_name": "kick", "destination_id": "superdirt"}
-        )
-
-        return headers
-
     def test_create_pattern(self, client, auth_headers_with_track):
         """Test creating a pattern."""
         response = client.post(
@@ -296,19 +318,6 @@ class TestPatternManagement:
 
 class TestSessionManagement:
     """Test session state endpoints."""
-
-    @pytest.fixture
-    def auth_headers(self, client):
-        """Create a client and return auth headers."""
-        response = client.post(
-            "/clients/alice_001",
-            json={"client_name": "Alice"}
-        )
-        token = response.json()["token"]
-        return {
-            "X-Client-ID": "alice_001",
-            "X-Client-Token": token
-        }
 
     def test_get_session_state(self, client, auth_headers):
         """Test getting session state."""

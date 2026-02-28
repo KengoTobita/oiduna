@@ -102,7 +102,7 @@ SessionContainerとLoopEngineをシングルトンとして管理。
 from functools import lru_cache
 from oiduna_session import SessionContainer
 from oiduna_loop import LoopEngine, LoopEngineFactory
-from oiduna_destination import OscDestinationConfig
+from oiduna_models import OscDestinationConfig
 
 # シングルトンインスタンス
 _container: Optional[SessionContainer] = None

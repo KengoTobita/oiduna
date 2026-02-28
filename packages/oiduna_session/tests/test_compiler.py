@@ -5,7 +5,7 @@ Unit tests for SessionCompiler.
 import pytest
 from oiduna_session import SessionCompiler, SessionContainer
 from oiduna_models import Event
-from oiduna_destination.destination_models import OscDestinationConfig
+from oiduna_models import OscDestinationConfig
 
 
 @pytest.fixture
@@ -138,3 +138,167 @@ class TestSessionCompiler:
         assert msg.params["sound"] == "bd"  # From base_params
         assert msg.params["orbit"] == 0  # From base_params
         assert msg.params["gain"] == 0.9  # From event.params (override)
+
+
+class TestSessionCompilerValidation:
+    """Test destination validation in SessionCompiler."""
+
+    def test_compile_with_invalid_destination_raises(self):
+        """Track with non-existent destination raises ValueError."""
+        container = SessionContainer()
+
+        # Add client
+        container.clients.create("client_001", "Alice", "mars")
+
+        # Manually create track with invalid destination (bypass manager validation)
+        from oiduna_models import Track
+        container.session.tracks["track_001"] = Track(
+            track_id="track_001",
+            track_name="kick",
+            destination_id="nonexistent",
+            client_id="client_001",
+            base_params={},
+            patterns={}
+        )
+
+        with pytest.raises(ValueError, match="non-existent destinations"):
+            SessionCompiler.compile(container.session)
+
+    def test_compile_error_lists_invalid_tracks(self):
+        """Error message lists all invalid track→destination."""
+        container = SessionContainer()
+        container.clients.create("client_001", "Alice", "mars")
+
+        from oiduna_models import Track
+
+        # Add two tracks with invalid destinations
+        container.session.tracks["track_001"] = Track(
+            track_id="track_001",
+            track_name="kick",
+            destination_id="dest1",
+            client_id="client_001"
+        )
+        container.session.tracks["track_002"] = Track(
+            track_id="track_002",
+            track_name="snare",
+            destination_id="dest2",
+            client_id="client_001"
+        )
+
+        with pytest.raises(ValueError) as exc_info:
+            SessionCompiler.compile(container.session)
+
+        error_msg = str(exc_info.value)
+        assert "track_001→dest1" in error_msg
+        assert "track_002→dest2" in error_msg
+
+    def test_compile_error_lists_available_destinations(self):
+        """Error message includes available destinations."""
+        container = SessionContainer()
+
+        # Add a valid destination
+        dest = OscDestinationConfig(
+            id="superdirt",
+            type="osc",
+            host="127.0.0.1",
+            port=57120,
+            address="/dirt/play"
+        )
+        container.destinations.add(dest)
+
+        # Add client
+        container.clients.create("client_001", "Alice", "mars")
+
+        # Add track with invalid destination
+        from oiduna_models import Track
+        container.session.tracks["track_001"] = Track(
+            track_id="track_001",
+            track_name="kick",
+            destination_id="invalid",
+            client_id="client_001"
+        )
+
+        with pytest.raises(ValueError) as exc_info:
+            SessionCompiler.compile(container.session)
+
+        error_msg = str(exc_info.value)
+        assert "Available destinations:" in error_msg
+        assert "superdirt" in error_msg
+
+    def test_compile_with_valid_destination_succeeds(self):
+        """Compile succeeds when all destinations exist."""
+        container = SessionContainer()
+
+        # Add destination
+        dest = OscDestinationConfig(
+            id="superdirt",
+            type="osc",
+            host="127.0.0.1",
+            port=57120,
+            address="/dirt/play"
+        )
+        container.destinations.add(dest)
+
+        # Add client
+        container.clients.create("client_001", "Alice", "mars")
+
+        # Add track with valid destination
+        container.tracks.create(
+            track_id="track_001",
+            track_name="kick",
+            destination_id="superdirt",
+            client_id="client_001"
+        )
+
+        # Should not raise
+        batch = SessionCompiler.compile(container.session)
+        assert batch is not None
+
+    def test_compile_multiple_invalid_destinations(self):
+        """Test error message with multiple invalid destinations."""
+        container = SessionContainer()
+
+        # Add some valid destinations
+        for dest_id in ["superdirt", "midi_out"]:
+            dest = OscDestinationConfig(
+                id=dest_id,
+                type="osc",
+                host="127.0.0.1",
+                port=57120,
+                address="/dirt/play"
+            )
+            container.destinations.add(dest)
+
+        container.clients.create("client_001", "Alice", "mars")
+
+        from oiduna_models import Track
+
+        # Add tracks with mix of valid and invalid destinations
+        container.session.tracks["track_001"] = Track(
+            track_id="track_001",
+            track_name="kick",
+            destination_id="superdirt",  # Valid
+            client_id="client_001"
+        )
+        container.session.tracks["track_002"] = Track(
+            track_id="track_002",
+            track_name="snare",
+            destination_id="invalid1",  # Invalid
+            client_id="client_001"
+        )
+        container.session.tracks["track_003"] = Track(
+            track_id="track_003",
+            track_name="hihat",
+            destination_id="invalid2",  # Invalid
+            client_id="client_001"
+        )
+
+        with pytest.raises(ValueError) as exc_info:
+            SessionCompiler.compile(container.session)
+
+        error_msg = str(exc_info.value)
+        # Should list both invalid references
+        assert "track_002→invalid1" in error_msg
+        assert "track_003→invalid2" in error_msg
+        # Should NOT list the valid one
+        assert "track_001" not in error_msg

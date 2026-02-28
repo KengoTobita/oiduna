@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from .environment import Environment
 from .client import ClientInfo
 from .track import Track
-from oiduna_destination.destination_models import DestinationConfig
+from .destination_models import DestinationConfig
 
 
 class Session(BaseModel):

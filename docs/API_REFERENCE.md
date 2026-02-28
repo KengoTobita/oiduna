@@ -1000,12 +1000,15 @@ eventSource.addEventListener('client_metadata_updated', (e) => {
 |------|---------|
 | 200 | Success |
 | 201 | Created |
-| 400 | Bad Request |
+| 400 | Bad Request - Invalid operation or business logic error |
 | 404 | Not Found |
-| 422 | Validation Error |
+| 409 | Conflict - Resource in use or constraint violation |
+| 422 | Validation Error - Invalid request format |
 | 500 | Server Error |
 
 ### Validation Error (422)
+
+Returned when request format is invalid (Pydantic validation failure).
 
 **Example Request**:
 ```bash
@@ -1027,6 +1030,73 @@ curl -X PATCH http://localhost:57122/playback/environment \
   ]
 }
 ```
+
+**Common Causes**:
+- Invalid destination_id format (contains spaces or special characters)
+- Missing required fields
+- Type mismatches (string instead of number, etc.)
+
+---
+
+### Bad Request (400)
+
+Returned when the request is valid but the operation cannot be completed due to business logic constraints.
+
+**Example 1 - Non-existent destination**:
+```bash
+curl -X POST http://localhost:57122/tracks/track_001 \
+  -H "X-Client-ID: alice_001" \
+  -H "X-Client-Token: <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "track_name": "kick",
+    "destination_id": "nonexistent",
+    "base_params": {}
+  }'
+```
+
+**Response** (400):
+```json
+{
+  "detail": "Destination 'nonexistent' does not exist in session"
+}
+```
+
+**Example 2 - Session compile error**:
+```bash
+POST /playback/sync
+```
+
+**Response** (400):
+```json
+{
+  "detail": "Session contains tracks with non-existent destinations: track_001→old_dest. Available destinations: ['superdirt', 'midi_out']"
+}
+```
+
+---
+
+### Conflict (409)
+
+Returned when attempting to delete or modify a resource that is in use.
+
+**Example - Deleting destination in use**:
+```bash
+DELETE /destinations/superdirt
+```
+
+**Response** (409):
+```json
+{
+  "detail": "Cannot remove destination 'superdirt': in use by 2 track(s): ['kick_track', 'snare_track']. Delete these tracks first, or assign them to a different destination."
+}
+```
+
+**Resolution**:
+1. Delete all tracks using the destination first
+2. Or reassign tracks to a different destination
+
+---
 
 ### Server Error (500)
 

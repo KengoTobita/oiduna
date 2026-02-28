@@ -5,7 +5,7 @@ Unit tests for SessionManager.
 import pytest
 from oiduna_session import SessionContainer
 from oiduna_models import Event
-from oiduna_destination.destination_models import OscDestinationConfig
+from oiduna_models import OscDestinationConfig
 
 
 @pytest.fixture

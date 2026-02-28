@@ -7,7 +7,7 @@ from oiduna_session.managers import (
     TrackManager,
     PatternManager,
 )
-from oiduna_destination.destination_models import OscDestinationConfig
+from oiduna_models import OscDestinationConfig
 
 
 @pytest.fixture

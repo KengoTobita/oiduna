@@ -46,6 +46,81 @@ POST /playback/session
 
 ---
 
+## Breaking Changes（破壊的変更）
+
+### v2.1.0 - Silent Failure防止
+
+#### Destination ID検証の強化
+
+**変更内容**: Destination IDのフォーマット検証が追加されました。
+
+**影響**: 不正な文字を含むdestination IDでのTrack作成が拒否されます。
+
+```bash
+# ❌ 無効な例（スペース、特殊文字）
+"destination_id": "super dirt"  # → 422 Validation Error
+"destination_id": "dest!"       # → 422 Validation Error
+"destination_id": "日本語"      # → 422 Validation Error
+
+# ✅ 有効な例
+"destination_id": "superdirt"    # OK
+"destination_id": "midi_volca"   # OK (アンダースコア)
+"destination_id": "osc-modular"  # OK (ハイフン)
+```
+
+**対応方法**: Destination IDを英数字、アンダースコア、ハイフンのみに修正してください。
+
+---
+
+#### Destination削除時の使用中チェック
+
+**変更内容**: Destinationを削除する際、使用中のTrackがある場合はエラーになります。
+
+**影響**: DELETE /destinations/{id} が以下の場合に409 Conflictを返すようになります：
+- Destinationが1つ以上のTrackで使用されている
+
+**旧動作**:
+```bash
+DELETE /destinations/superdirt
+# → 204 No Content（常に成功）
+```
+
+**新動作**:
+```bash
+DELETE /destinations/superdirt
+# → 409 Conflict（使用中の場合）
+{
+  "detail": "Cannot remove destination 'superdirt': in use by 2 track(s): ['kick_track', 'snare_track']. Delete these tracks first, or assign them to a different destination."
+}
+```
+
+**対応方法**:
+1. 使用中のTrackを全て削除する
+2. または、Trackを別のdestinationに再割り当てする（Trackを再作成）
+
+---
+
+#### Session Compile時の検証強化
+
+**変更内容**: SessionCompilerが存在しないdestinationへの参照を検出するようになりました。
+
+**影響**:
+- 存在しないdestinationを参照するTrackがあるとコンパイルエラー
+- POST /playback/sync が400 Bad Requestを返す
+
+**エラー例**:
+```json
+{
+  "detail": "Session contains tracks with non-existent destinations: track_001→old_dest. Available destinations: ['superdirt', 'midi_out']"
+}
+```
+
+**対応方法**:
+1. 必要なdestinationを事前に登録
+2. または、参照しているTrackを削除/修正
+
+---
+
 ## 移行手順
 
 ### Step 1: Client登録

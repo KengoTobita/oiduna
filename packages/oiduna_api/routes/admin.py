@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from oiduna_api.dependencies import get_container
 from oiduna_auth import verify_admin_password
 from oiduna_session import SessionContainer, SessionValidator
-from oiduna_destination.destination_models import DestinationConfig, OscDestinationConfig, MidiDestinationConfig
+from oiduna_models import DestinationConfig, OscDestinationConfig, MidiDestinationConfig
 
 
 router = APIRouter()

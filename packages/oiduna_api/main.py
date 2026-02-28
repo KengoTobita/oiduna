@@ -17,7 +17,7 @@ from oiduna_api.dependencies import get_container
 from oiduna_api.extensions import discover_extensions
 from oiduna_api.routes import assets, dashboard, midi, playback, stream, auth, session, tracks, patterns, admin
 from oiduna_api.services.loop_service import LoopService, get_loop_service, lifespan
-from oiduna_destination import load_destinations_from_file
+from oiduna_models import load_destinations_from_file
 
 logger = logging.getLogger(__name__)
 

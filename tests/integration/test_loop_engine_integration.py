@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "packages"))
 from oiduna_api.main import app
 from oiduna_api.dependencies import get_container
 from oiduna_session import SessionCompiler
-from oiduna_destination.destination_models import OscDestinationConfig
+from oiduna_models import OscDestinationConfig
 
 
 @pytest.fixture
@@ -388,7 +388,7 @@ class TestDestinationRouting:
         """Test routing messages to different destinations."""
         # Add MIDI destination
         container = get_container()
-        from oiduna_destination.destination_models import MidiDestinationConfig
+        from oiduna_models import MidiDestinationConfig
 
         midi_dest = MidiDestinationConfig(
             id="midi_synth",

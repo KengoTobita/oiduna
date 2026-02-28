@@ -2,7 +2,8 @@
 
 from typing import Optional
 from oiduna_models import Session
-from oiduna_destination.destination_models import DestinationConfig
+from oiduna_models import DestinationConfig
+from oiduna_session.validator import SessionValidator
 from .base import BaseManager, EventSink
 
 
@@ -46,19 +47,39 @@ class DestinationManager(BaseManager):
         """
         Remove a destination.
 
-        Note: Does not check if tracks are using this destination.
-        Caller should validate before removal if needed.
-
         Args:
             destination_id: ID of the destination to remove
 
         Returns:
             True if removed, False if not found
+
+        Raises:
+            ValueError: If destination is in use by tracks
         """
-        if destination_id in self.session.destinations:
-            del self.session.destinations[destination_id]
-            return True
-        return False
+        if destination_id not in self.session.destinations:
+            return False
+
+        # Check if destination is in use
+        validator = SessionValidator()
+        using_tracks = validator.check_destination_in_use(
+            self.session, destination_id
+        )
+
+        if using_tracks:
+            raise ValueError(
+                f"Cannot remove destination '{destination_id}': "
+                f"in use by {len(using_tracks)} track(s): {using_tracks}. "
+                f"Delete these tracks first, or assign them to a different destination."
+            )
+
+        del self.session.destinations[destination_id]
+
+        # Emit event
+        self._emit_event("destination_removed", {
+            "destination_id": destination_id,
+        })
+
+        return True
 
     def get(self, destination_id: str) -> Optional[DestinationConfig]:
         """

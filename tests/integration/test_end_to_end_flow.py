@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "packages"))
 from oiduna_api.main import app
 from oiduna_api.dependencies import get_container
 from oiduna_session import SessionContainer, SessionCompiler
-from oiduna_destination.destination_models import OscDestinationConfig
+from oiduna_models import OscDestinationConfig
 from oiduna_models import Event
 
 

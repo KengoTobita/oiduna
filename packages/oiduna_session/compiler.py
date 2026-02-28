@@ -78,6 +78,9 @@ class SessionCompiler:
         Returns:
             ScheduledMessageBatch ready for Loop Engine
 
+        Raises:
+            ValueError: If any track references non-existent destination
+
         Example:
             >>> batch = SessionCompiler.compile(session)
             >>> batch.bpm
@@ -87,8 +90,16 @@ class SessionCompiler:
         """
         messages = []
         destinations = set()
+        invalid_destinations: list[dict[str, str]] = []
 
         for track in session.tracks.values():
+            # Validate destination exists
+            if track.destination_id not in session.destinations:
+                invalid_destinations.append({
+                    "track_id": track.track_id,
+                    "destination_id": track.destination_id
+                })
+
             # Collect destination ID
             destinations.add(track.destination_id)
 
@@ -101,6 +112,18 @@ class SessionCompiler:
                 for event in pattern.events:
                     msg = SessionCompiler._create_message_from_event(track, event)
                     messages.append(msg)
+
+        # Fail fast if invalid destinations found
+        if invalid_destinations:
+            available = list(session.destinations.keys())
+            error_details = ", ".join(
+                f"{item['track_id']}\u2192{item['destination_id']}"
+                for item in invalid_destinations
+            )
+            raise ValueError(
+                f"Session contains tracks with non-existent destinations: {error_details}. "
+                f"Available destinations: {available}"
+            )
 
         return ScheduledMessageBatch(
             messages=tuple(messages),

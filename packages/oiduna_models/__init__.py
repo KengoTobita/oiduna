@@ -17,6 +17,12 @@ from .events import Event
 from .client import ClientInfo
 from .environment import Environment
 from .id_generator import IDGenerator
+from .destination_models import (
+    OscDestinationConfig,
+    MidiDestinationConfig,
+    DestinationConfig,
+)
+from .loader import load_destinations, load_destinations_from_file
 
 __all__ = [
     "Session",
@@ -26,4 +32,9 @@ __all__ = [
     "ClientInfo",
     "Environment",
     "IDGenerator",
+    "OscDestinationConfig",
+    "MidiDestinationConfig",
+    "DestinationConfig",
+    "load_destinations",
+    "load_destinations_from_file",
 ]
