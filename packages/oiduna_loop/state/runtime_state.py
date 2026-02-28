@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any
 from oiduna_core.constants.steps import LOOP_STEPS
 
 if TYPE_CHECKING:
-    from oiduna_core.ir.scheduled_message import ScheduledMessage
+    from oiduna_scheduler.scheduler_models import ScheduledMessage
 
 # Timing constants (16th note resolution)
 STEPS_PER_BEAT = 4   # 4 steps (16th notes) per beat
@@ -226,8 +226,9 @@ class RuntimeState:
         Returns:
             Filtered list of messages (only active tracks + trackless messages)
         """
-        # Fast path: no mute/solo → return as-is (no copy)
-        if not self._track_mute and not self._track_solo:
+        # Fast path: no mute/solo AND no registered tracks → return as-is (no copy)
+        # (If tracks are registered, we must filter unknown track_ids)
+        if not self._track_mute and not self._track_solo and not self._known_track_ids:
             return messages
 
         # Slow path: filter active tracks + trackless messages

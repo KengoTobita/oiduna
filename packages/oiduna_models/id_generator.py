@@ -25,7 +25,7 @@ class IDGenerator:
         'pattern_001'
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._track_counter = 0
         self._pattern_counter = 0
 

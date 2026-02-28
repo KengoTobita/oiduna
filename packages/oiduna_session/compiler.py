@@ -86,8 +86,12 @@ class SessionCompiler:
             10
         """
         messages = []
+        destinations = set()
 
         for track in session.tracks.values():
+            # Collect destination ID
+            destinations.add(track.destination_id)
+
             for pattern in track.patterns.values():
                 # Skip inactive patterns
                 if not pattern.active:
@@ -102,6 +106,7 @@ class SessionCompiler:
             messages=tuple(messages),
             bpm=session.environment.bpm,
             pattern_length=4.0,  # Fixed (not used by 256-step engine)
+            destinations=frozenset(destinations),
         )
 
     @staticmethod

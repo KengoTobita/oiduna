@@ -339,6 +339,20 @@ class LoopEngine:
         except Exception as e:
             return CommandResult.error(f"Invalid session payload: {e}")
 
+        # Validate destinations are registered
+        missing_destinations = []
+        for dest_id in batch.destinations:
+            if not self._destination_router.has_destination(dest_id):
+                missing_destinations.append(dest_id)
+
+        if missing_destinations:
+            registered = self._destination_router.get_registered_destinations()
+            return CommandResult.error(
+                f"Session references unregistered destinations: {missing_destinations}. "
+                f"Registered destinations: {registered}. "
+                f"Check destinations.yaml configuration."
+            )
+
         # Load messages into scheduler
         logger.info(
             f"Loading session: {len(batch.messages)} messages, "

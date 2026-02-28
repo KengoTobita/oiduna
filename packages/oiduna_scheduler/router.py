@@ -163,3 +163,7 @@ class DestinationRouter:
     def get_registered_destinations(self) -> List[str]:
         """Get list of registered destination IDs."""
         return list(self._senders.keys())
+
+    def has_destination(self, destination_id: str) -> bool:
+        """Check if destination is registered."""
+        return destination_id in self._senders

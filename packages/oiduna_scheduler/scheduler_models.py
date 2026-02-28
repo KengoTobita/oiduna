@@ -94,6 +94,7 @@ class ScheduledMessageBatch:
     messages: tuple[ScheduledMessage, ...]  # All messages for session
     bpm: float = 120.0  # Tempo
     pattern_length: float = 4.0  # Pattern length in cycles
+    destinations: frozenset[str] = field(default_factory=frozenset)  # Destination IDs referenced
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary (for JSON serialization)."""
@@ -101,14 +102,22 @@ class ScheduledMessageBatch:
             "messages": [msg.to_dict() for msg in self.messages],
             "bpm": self.bpm,
             "pattern_length": self.pattern_length,
+            "destinations": list(self.destinations),
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ScheduledMessageBatch:
         """Create from dictionary (for JSON deserialization)."""
         messages = [ScheduledMessage.from_dict(msg) for msg in data["messages"]]
+
+        # Backward compatibility: infer destinations from messages if not present
+        destinations = data.get("destinations")
+        if destinations is None:
+            destinations = {msg.destination_id for msg in messages}
+
         return cls(
             messages=tuple(messages),
             bpm=data.get("bpm", 120.0),
             pattern_length=data.get("pattern_length", 4.0),
+            destinations=frozenset(destinations),
         )
