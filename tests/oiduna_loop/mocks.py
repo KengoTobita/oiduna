@@ -10,10 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from oiduna_core.models.output import OscEvent
+from typing import Any
 
 
 @dataclass
@@ -116,7 +113,7 @@ class MockOscOutput:
     Records all OSC events for test assertions.
     """
 
-    osc_events: list = field(default_factory=list)  # list[OscEvent]
+    osc_events: list = field(default_factory=list)  # list[Any] (OSC events)
     _connected: bool = True
 
     def connect(self) -> None:
@@ -125,7 +122,7 @@ class MockOscOutput:
     def disconnect(self) -> None:
         self._connected = False
 
-    def send_osc_event(self, event: OscEvent) -> bool:
+    def send_osc_event(self, event: Any) -> bool:
         """Records OscEvent directly."""
         self.osc_events.append(event)
         return True

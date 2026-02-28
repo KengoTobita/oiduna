@@ -1,12 +1,28 @@
-"""MIDI-related constants for Oiduna Framework.
+"""Constants for Oiduna Loop Engine.
 
-Common MIDI CC (Control Change) numbers used in the system.
-Includes CC name aliases for DSL modulation targets.
+Includes:
+- Step-related constants (256-step loop)
+- MIDI CC constants and aliases
 """
 
 from __future__ import annotations
 
 from typing import Final
+
+# =============================================================================
+# Step-related constants
+# =============================================================================
+
+# Core loop length - fixed at 256 steps
+LOOP_STEPS: Final[int] = 256
+
+# Timing subdivisions
+STEPS_PER_BEAT: Final[int] = 4  # 16th note per beat (4 beats per bar)
+STEPS_PER_BAR: Final[int] = 16  # 16 steps per bar (1 bar = 4 beats)
+
+# =============================================================================
+# MIDI-related constants
+# =============================================================================
 
 # Standard MIDI CC numbers
 CC_MODWHEEL: Final[int] = 1

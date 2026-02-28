@@ -34,7 +34,6 @@ asyncio_mode = "auto"
 pythonpath = [
     "packages/oiduna_api",
     "packages/oiduna_loop",
-    "packages/oiduna_core",
     "packages/oiduna_scheduler",
 ]
 

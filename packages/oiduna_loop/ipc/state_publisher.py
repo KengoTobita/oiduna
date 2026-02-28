@@ -11,7 +11,8 @@ from typing import Any
 
 import zmq
 import zmq.asyncio
-from oiduna_core.ipc import IPCSerializer
+
+from .serializer import IPCSerializer
 
 logger = logging.getLogger(__name__)
 

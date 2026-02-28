@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
-from oiduna_core.constants.steps import LOOP_STEPS
+from ..constants import LOOP_STEPS
 
 if TYPE_CHECKING:
     from oiduna_scheduler.scheduler_models import ScheduledMessage

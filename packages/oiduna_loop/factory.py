@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import cast
 
-from oiduna_core.protocols.ipc import CommandSource, StateSink
+from .ipc.protocols import CommandSource, StateSink
 
 from .engine import LoopEngine
 from .ipc import InProcessStateSink, NoopCommandSource

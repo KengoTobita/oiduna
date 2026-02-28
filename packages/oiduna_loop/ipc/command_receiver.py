@@ -11,7 +11,8 @@ from typing import TYPE_CHECKING, Any
 
 import zmq
 import zmq.asyncio
-from oiduna_core.ipc import IPCSerializer
+
+from .serializer import IPCSerializer
 
 if TYPE_CHECKING:
     from collections.abc import Callable
