@@ -34,7 +34,7 @@ class TestSessionDestinationValidation:
     def test_session_with_unregistered_destination_fails(self, engine):
         """Session loading should fail if destination is not registered."""
         # Enable destinations (but don't register any)
-        engine._destinations_loaded = True
+        engine._session_loader._destinations_loaded = True
 
         # Create session with unregistered destination
         msg = ScheduledMessage(
@@ -51,7 +51,7 @@ class TestSessionDestinationValidation:
         )
 
         # Try to load session
-        result = engine._handle_session(batch.to_dict())
+        result = engine._session_loader.load_session(batch.to_dict())
 
         # Should fail with clear error message
         assert not result.success
@@ -61,7 +61,7 @@ class TestSessionDestinationValidation:
     def test_session_with_registered_destination_succeeds(self, engine):
         """Session loading should succeed if all destinations are registered."""
         # Enable destinations and register one
-        engine._destinations_loaded = True
+        engine._session_loader._destinations_loaded = True
         engine._destination_router._senders["superdirt"] = None  # Mock sender
 
         # Create session with registered destination
@@ -79,7 +79,7 @@ class TestSessionDestinationValidation:
         )
 
         # Load session
-        result = engine._handle_session(batch.to_dict())
+        result = engine._session_loader.load_session(batch.to_dict())
 
         # Should succeed
         assert result.success
@@ -87,7 +87,7 @@ class TestSessionDestinationValidation:
     def test_session_with_mixed_destinations_fails_if_any_unregistered(self, engine):
         """Session should fail if any destination is unregistered."""
         # Enable destinations and register only one
-        engine._destinations_loaded = True
+        engine._session_loader._destinations_loaded = True
         engine._destination_router._senders["superdirt"] = None  # Registered
 
         # Create session with both registered and unregistered destinations
@@ -111,7 +111,7 @@ class TestSessionDestinationValidation:
         )
 
         # Try to load session
-        result = engine._handle_session(batch.to_dict())
+        result = engine._session_loader.load_session(batch.to_dict())
 
         # Should fail mentioning unregistered destination
         assert not result.success
@@ -121,7 +121,7 @@ class TestSessionDestinationValidation:
     def test_error_message_includes_registered_destinations(self, engine):
         """Error message should list registered destinations for troubleshooting."""
         # Enable destinations and register some
-        engine._destinations_loaded = True
+        engine._session_loader._destinations_loaded = True
         engine._destination_router._senders["superdirt"] = None
         engine._destination_router._senders["midi"] = None
 
@@ -139,7 +139,7 @@ class TestSessionDestinationValidation:
             destinations=frozenset({"nonexistent"}),
         )
 
-        result = engine._handle_session(batch.to_dict())
+        result = engine._session_loader.load_session(batch.to_dict())
 
         # Error should mention registered destinations
         assert not result.success
@@ -150,7 +150,7 @@ class TestSessionDestinationValidation:
     def test_backward_compatibility_inferred_destinations(self, engine):
         """Session should validate even with inferred destinations (backward compat)."""
         # Enable destinations and register one
-        engine._destinations_loaded = True
+        engine._session_loader._destinations_loaded = True
         engine._destination_router._senders["superdirt"] = None
 
         # Create session dict WITHOUT destinations field (old format)
@@ -169,14 +169,14 @@ class TestSessionDestinationValidation:
         }
 
         # Load session
-        result = engine._handle_session(session_dict)
+        result = engine._session_loader.load_session(session_dict)
 
         # Should succeed with inferred destinations
         assert result.success
 
     def test_empty_session_succeeds(self, engine):
         """Empty session with no destinations should succeed."""
-        engine._destinations_loaded = True
+        engine._session_loader._destinations_loaded = True
 
         batch = ScheduledMessageBatch(
             messages=(),
@@ -185,7 +185,7 @@ class TestSessionDestinationValidation:
             destinations=frozenset(),
         )
 
-        result = engine._handle_session(batch.to_dict())
+        result = engine._session_loader.load_session(batch.to_dict())
 
         # Should succeed (no destinations to validate)
         assert result.success

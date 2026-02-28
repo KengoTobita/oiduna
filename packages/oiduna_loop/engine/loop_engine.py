@@ -42,6 +42,7 @@ from ..state import PlaybackState, RuntimeState
 from .clock_generator import ClockGenerator
 from .command_handler import CommandHandler
 from .note_scheduler import NoteScheduler
+from .session_loader import SessionLoader
 # New destination-based architecture imports
 from pathlib import Path
 
@@ -156,7 +157,14 @@ class LoopEngine:
         # New destination-based architecture (Milestone 3)
         self._message_scheduler = MessageScheduler()
         self._destination_router = DestinationRouter()
-        self._destinations_loaded = False
+
+        # Session loader (extracted for SRP)
+        self._session_loader = SessionLoader(
+            destination_router=self._destination_router,
+            message_scheduler=self._message_scheduler,
+            state=self.state,
+            status_update_callback=self._schedule_status_update,
+        )
 
         # Extension hooks (API layer integration)
         self._before_send_hooks = before_send_hooks or []
@@ -193,7 +201,7 @@ class LoopEngine:
         self._register_handlers()
 
         # Load destination configurations (new architecture)
-        self._load_destinations()
+        self._session_loader.load_destinations()
 
         logger.info("Loop engine started")
 
@@ -225,8 +233,8 @@ class LoopEngine:
                 midi_enabled=self._midi_enabled,
             )
 
-        # Session loading (remains in LoopEngine - needs access to schedulers)
-        self._commands.register_handler("session", self._handle_session)
+        # Session loading (delegated to SessionLoader)
+        self._commands.register_handler("session", self._session_loader.load_session)
 
         # Playback commands (delegated to CommandHandler via wrappers)
         self._commands.register_handler("play", self._command_handler.handle_play)
@@ -241,144 +249,9 @@ class LoopEngine:
         self._commands.register_handler("midi_port", self._handle_midi_port)
         self._commands.register_handler("midi_panic", self._handle_midi_panic)
 
-    def _load_destinations(self) -> None:
-        """
-        Load destination configurations and register senders.
-
-        Reads destinations.yaml and creates appropriate senders
-        (OscDestinationSender, MidiDestinationSender) for each destination.
-
-        If configuration file is not found, logs a warning but continues.
-        The new destination-based API will not work without this.
-        """
-        config_path = Path("destinations.yaml")
-
-        if not config_path.exists():
-            logger.warning(
-                f"Destination config file not found: {config_path}. "
-                "New destination-based API (/playback/session) will not work. "
-                "Using legacy /playback/pattern endpoint is still supported."
-            )
-            return
-
-        try:
-            # Load and validate destination configurations
-            destinations = load_destinations_from_file(config_path)
-            logger.info(f"Loaded {len(destinations)} destination(s) from {config_path}")
-
-            # Register each destination with appropriate sender
-            for dest_id, dest_config in destinations.items():
-                if isinstance(dest_config, OscDestinationConfig):
-                    # Create OSC sender
-                    sender = OscDestinationSender(
-                        host=dest_config.host,
-                        port=dest_config.port,
-                        address=dest_config.address,
-                        use_bundle=dest_config.use_bundle,
-                    )
-                    self._destination_router.register_destination(dest_id, sender)
-                    logger.info(
-                        f"Registered OSC destination '{dest_id}': "
-                        f"{dest_config.host}:{dest_config.port}{dest_config.address}"
-                    )
-
-                elif isinstance(dest_config, MidiDestinationConfig):
-                    # Create MIDI sender
-                    try:
-                        sender = MidiDestinationSender(
-                            port_name=dest_config.port_name,
-                            default_channel=dest_config.default_channel,
-                        )
-                        self._destination_router.register_destination(dest_id, sender)
-                        logger.info(
-                            f"Registered MIDI destination '{dest_id}': "
-                            f"{dest_config.port_name} (ch {dest_config.default_channel})"
-                        )
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to open MIDI destination '{dest_id}': {e}. "
-                            "Skipping this destination."
-                        )
-                        continue
-
-            self._destinations_loaded = True
-            logger.info("Destination routing system initialized")
-
-        except Exception as e:
-            logger.error(f"Failed to load destinations: {e}", exc_info=True)
-            logger.warning("Destination-based API will not be available")
-
     # ================================================================
     # Command Handlers
     # ================================================================
-
-    def _handle_session(self, payload: dict[str, Any]) -> CommandResult:
-        """
-        Load session using new destination-based API (Milestone 3).
-
-        Accepts ScheduledMessageBatch format with generic messages
-        that route to configured destinations.
-
-        Args:
-            payload: Dict with keys:
-                - messages: List of {destination_id, cycle, step, params}
-                - bpm: Tempo (optional, default 120.0)
-                - pattern_length: Pattern length in cycles (optional, default 4.0)
-        """
-        # Check if destinations are loaded
-        if not self._destinations_loaded:
-            return CommandResult.error(
-                "Destination configuration not loaded. "
-                "Ensure destinations.yaml exists and is valid. "
-                "Cannot use session-based API without destination configuration."
-            )
-
-        # Parse and validate the batch
-        try:
-            batch = ScheduledMessageBatch.from_dict(payload)
-        except Exception as e:
-            return CommandResult.error(f"Invalid session payload: {e}")
-
-        # Validate destinations are registered
-        missing_destinations = []
-        for dest_id in batch.destinations:
-            if not self._destination_router.has_destination(dest_id):
-                missing_destinations.append(dest_id)
-
-        if missing_destinations:
-            registered = self._destination_router.get_registered_destinations()
-            return CommandResult.error(
-                f"Session references unregistered destinations: {missing_destinations}. "
-                f"Registered destinations: {registered}. "
-                f"Check destinations.yaml configuration."
-            )
-
-        # Load messages into scheduler
-        logger.info(
-            f"Loading session: {len(batch.messages)} messages, "
-            f"BPM={batch.bpm}, length={batch.pattern_length} cycles"
-        )
-
-        self._message_scheduler.load_messages(batch)
-
-        # Update BPM in state
-        self.state.set_bpm(batch.bpm)
-
-        # Register track_ids from messages for mute/solo filtering
-        for msg in batch.messages:
-            track_id = msg.params.get("track_id")
-            if track_id:
-                self.state.register_track(track_id)
-
-        # Send status update
-        self._schedule_status_update()
-
-        logger.info(
-            f"Session loaded successfully: {self._message_scheduler.message_count} messages "
-            f"across {len(self._message_scheduler.occupied_steps)} steps"
-        )
-
-        return CommandResult.ok()
 
     def handle_play(self, payload: dict[str, Any]) -> CommandResult:
         """
@@ -825,7 +698,7 @@ class LoopEngine:
         Returns:
             Filtered list of ScheduledMessage for current step
         """
-        if not self._destinations_loaded or self._message_scheduler.message_count == 0:
+        if not self._session_loader.destinations_loaded or self._message_scheduler.message_count == 0:
             return []
 
         scheduled_messages = self._message_scheduler.get_messages_at_step(current_step)
