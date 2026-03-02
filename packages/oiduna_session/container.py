@@ -2,7 +2,7 @@
 
 from typing import Optional
 from oiduna_models import Session, IDGenerator
-from .managers.base import EventSink
+from .managers.base import SessionEventSink, EventSink  # EventSink is legacy alias
 from .managers.client_manager import ClientManager
 from .managers.destination_manager import DestinationManager
 from .managers.environment_manager import EnvironmentManager
@@ -24,12 +24,13 @@ class SessionContainer:
         >>> pattern = container.patterns.create("t1", "p1", "main", "c1")
     """
 
-    def __init__(self, event_sink: Optional[EventSink] = None) -> None:
+    def __init__(self, event_sink: Optional[SessionEventSink] = None) -> None:
         """
         SessionContainerの初期化.
 
         Args:
-            event_sink: Optional event sink for SSE events
+            event_sink: Optional session event sink for SSE events.
+                Accepts SessionEventSink (new) or EventSink (legacy).
         """
         self.session = Session()
         self.id_gen = IDGenerator()

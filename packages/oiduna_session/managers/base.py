@@ -4,12 +4,38 @@ from typing import Any, Optional, Protocol
 from oiduna_models import Session
 
 
-class EventSink(Protocol):
-    """Protocol for event sinks (e.g., InProcessStateSink)."""
+class SessionEventSink(Protocol):
+    """
+    Protocol for session event sinks.
+
+    Receives session-layer CRUD events (track_created, pattern_updated, etc.)
+    and forwards them to SSE endpoint for client notification.
+
+    This is distinct from StateProducer (Loop layer state updates like position, status).
+
+    Implementations:
+        - InProcessStateSink: In-process queue-based implementation
+
+    Example events:
+        - client_connected, client_disconnected
+        - track_created, track_updated, track_deleted
+        - pattern_created, pattern_updated, pattern_deleted
+        - environment_updated
+    """
 
     def _push(self, event: dict[str, Any]) -> None:
-        """Push an event to the sink."""
+        """
+        Push a session event to the sink.
+
+        Args:
+            event: Event dictionary with 'type' and 'data' keys
+                Example: {"type": "track_created", "data": {...}}
+        """
         ...
+
+
+# Legacy alias for backward compatibility (DEPRECATED as of v2.1)
+EventSink = SessionEventSink
 
 
 class BaseManager:
@@ -23,14 +49,15 @@ class BaseManager:
     def __init__(
         self,
         session: Session,
-        event_sink: Optional[EventSink] = None,
+        event_sink: Optional[SessionEventSink] = None,
     ) -> None:
         """
         Initialize the base manager.
 
         Args:
             session: The session object to manage
-            event_sink: Optional event sink for emitting state changes
+            event_sink: Optional session event sink for emitting CRUD events.
+                Accepts SessionEventSink (new) or EventSink (legacy).
         """
         self.session = session
         self.event_sink = event_sink

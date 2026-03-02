@@ -8,8 +8,12 @@ from oiduna_models import Event
 from oiduna_models import OscDestinationConfig
 
 
-class MockEventSink:
-    """Mock event sink for testing."""
+class MockSessionEventSink:
+    """
+    Mock session event sink for testing.
+
+    Implements SessionEventSink protocol for testing event emission.
+    """
 
     def __init__(self):
         self.events = []
@@ -27,10 +31,14 @@ class MockEventSink:
         return [e for e in self.events if e["type"] == event_type]
 
 
+# Legacy alias for backward compatibility
+MockEventSink = MockSessionEventSink
+
+
 @pytest.fixture
 def manager_with_sink():
-    """Create container with mock event sink."""
-    sink = MockEventSink()
+    """Create container with mock session event sink."""
+    sink = MockSessionEventSink()
     container = SessionContainer(event_sink=sink)
 
     # Add destination
