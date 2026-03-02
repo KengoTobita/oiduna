@@ -15,7 +15,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 # Default queue size — drop-oldest keeps memory bounded
-_DEFAULT_QUEUE_SIZE = 64
+_DEFAULT_QUEUE_SIZE = 128
 
 
 class NoopCommandSource:
