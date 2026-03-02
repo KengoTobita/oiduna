@@ -5,7 +5,7 @@ The Environment contains mutable global parameters like BPM and metadata,
 as well as immutable initial metadata for reference.
 """
 
-from typing import Any
+from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
@@ -16,6 +16,7 @@ class Environment(BaseModel):
     Mutable fields (via PATCH /session/environment):
         - bpm
         - metadata
+        - position_update_interval
 
     Immutable fields (set at session creation):
         - initial_metadata
@@ -24,7 +25,8 @@ class Environment(BaseModel):
         >>> env = Environment(
         ...     bpm=120.0,
         ...     metadata={"key": "Am", "scale": "minor"},
-        ...     initial_metadata={"created_by": "client_001"}
+        ...     initial_metadata={"created_by": "client_001"},
+        ...     position_update_interval="beat"
         ... )
     """
 
@@ -38,6 +40,10 @@ class Environment(BaseModel):
     metadata: dict[str, Any] = Field(
         default_factory=dict,
         description="Mutable session metadata (key, scale, etc.)"
+    )
+    position_update_interval: Literal["beat", "bar"] = Field(
+        default="beat",
+        description="SSE position event frequency: 'beat' (every 4 steps) or 'bar' (every 16 steps)"
     )
 
     # Immutable field (set at session creation)

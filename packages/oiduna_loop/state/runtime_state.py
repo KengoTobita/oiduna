@@ -96,6 +96,9 @@ class RuntimeState:
     _known_track_ids: set[str] = field(default_factory=set)
     _active_track_ids: set[str] = field(default_factory=set)
 
+    # SSE configuration
+    position_update_interval: str = "beat"  # "beat" (4 steps) or "bar" (16 steps)
+
     @property
     def playing(self) -> bool:
         """Check if actively playing"""

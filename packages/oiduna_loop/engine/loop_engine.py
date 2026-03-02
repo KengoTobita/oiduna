@@ -747,8 +747,11 @@ class LoopEngine:
         Args:
             current_step: Current step number
         """
-        # Publish position on beat boundaries (quarter notes) to reduce traffic
-        if current_step % 4 == 0:
+        # Publish position based on configured interval
+        # "beat": every 4 steps (quarter note)
+        # "bar": every 16 steps (full bar)
+        interval = 16 if self.state.position_update_interval == "bar" else 4
+        if current_step % interval == 0:
             await self._publisher.send_position(
                 self.state.position.to_dict(),
                 bpm=self.state.bpm,

@@ -30,6 +30,7 @@ class EnvironmentManager(BaseManager):
         self,
         bpm: Optional[float] = None,
         metadata: Optional[dict[str, Any]] = None,
+        position_update_interval: Optional[str] = None,
     ) -> Environment:
         """
         Update environment settings.
@@ -37,6 +38,7 @@ class EnvironmentManager(BaseManager):
         Args:
             bpm: New BPM (optional)
             metadata: Metadata to merge (optional)
+            position_update_interval: Position update frequency: 'beat' or 'bar' (optional)
 
         Returns:
             Updated Environment
@@ -48,6 +50,11 @@ class EnvironmentManager(BaseManager):
         if metadata is not None:
             self.session.environment.metadata.update(metadata)
             updated_fields["metadata"] = metadata
+        if position_update_interval is not None:
+            if position_update_interval not in ("beat", "bar"):
+                raise ValueError("position_update_interval must be 'beat' or 'bar'")
+            self.session.environment.position_update_interval = position_update_interval  # type: ignore
+            updated_fields["position_update_interval"] = position_update_interval
 
         # Emit event
         if updated_fields:

@@ -331,7 +331,8 @@ Patternが削除された
   "metadata": {
     "key": "Am",
     "scale": "minor"
-  }
+  },
+  "position_update_interval": "bar"
 }
 ```
 
@@ -340,6 +341,7 @@ Patternが削除された
 **用途**:
 - BPM表示の更新
 - メタデータ同期
+- SSE position頻度の変更検知
 
 **JavaScript例**:
 ```javascript
@@ -363,9 +365,21 @@ eventSource.addEventListener('environment_updated', (event) => {
 
 #### `position`
 
-現在の再生位置（高頻度）
+現在の再生位置（設定可能な頻度）
 
 **トリガー**: Loop Engine内部
+
+**送信頻度** (`position_update_interval`で設定):
+- **`"beat"`** (デフォルト): 4ステップごと（1拍ごと）— BPM 120で約2イベント/秒
+- **`"bar"`**: 16ステップごと（1小節ごと）— BPM 120で約0.5イベント/秒（ネットワーク負荷75%削減）
+
+設定方法:
+```bash
+PATCH /session/environment
+{
+  "position_update_interval": "bar"
+}
+```
 
 **データ**:
 ```json
@@ -382,7 +396,42 @@ eventSource.addEventListener('environment_updated', (event) => {
 - 再生位置インジケーター
 - 同期表示
 
-**注意**: 高頻度で送信されます（毎ステップ）。パフォーマンスに注意。
+**クライアント側の補間** (`"bar"`設定時推奨):
+
+更新頻度を下げた場合、クライアント側でBPMを使って中間位置を推定できます:
+
+```javascript
+// 設定取得
+const config = await fetch('/config').then(r => r.json());
+const bpm = config.environment.bpm;
+
+// 最後の位置を記録
+let lastPosition = { step: 0, beat: 0, bar: 0 };
+let lastUpdateTime = Date.now();
+
+eventSource.addEventListener('position', (e) => {
+  lastPosition = JSON.parse(e.data);
+  lastUpdateTime = Date.now();
+});
+
+// 補間（60fps で呼び出し）
+function getInterpolatedPosition() {
+  const elapsed = (Date.now() - lastUpdateTime) / 1000;
+  const stepDuration = 60 / (bpm * 4);
+  const estimatedStep = lastPosition.step + Math.floor(elapsed / stepDuration);
+
+  return {
+    step: estimatedStep % 256,
+    beat: Math.floor(estimatedStep / 4) % 4,
+    bar: Math.floor(estimatedStep / 16)
+  };
+}
+```
+
+**注意**:
+- `"beat"`設定でも一定の頻度で送信されます
+- ネットワーク帯域削減が必要な場合は`"bar"`を使用
+- `"bar"`使用時は、上記の補間コードでスムーズなUI更新を実現できます
 
 ---
 

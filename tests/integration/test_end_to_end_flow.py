@@ -52,6 +52,102 @@ def reset_container():
     container.reset()
 
 
+class TestConfigEndpoint:
+    """Test GET /config endpoint for structural information."""
+
+    def test_config_basic_structure(self, client):
+        """Test that /config returns basic structure without clients/destinations."""
+        # Get config (no auth required)
+        response = client.get("/config")
+        assert response.status_code == 200
+
+        data = response.json()
+
+        # Check basic fields
+        assert "environment" in data
+        assert "loop_steps" in data
+        assert "api_version" in data
+        assert "clients" in data
+        assert "destinations" in data
+
+        # Check environment structure
+        assert "bpm" in data["environment"]
+        assert "position_update_interval" in data["environment"]
+
+        # Check system constants
+        assert data["loop_steps"] == 256
+        assert data["api_version"] == "1.0"
+
+    def test_config_with_clients_and_destinations(self, client):
+        """Test that /config returns clients and destinations."""
+        # Register a client
+        response = client.post(
+            "/clients/alice_001",
+            json={
+                "client_name": "Alice's MARS",
+                "distribution": "mars"
+            }
+        )
+        assert response.status_code == 201
+
+        # Get config
+        response = client.get("/config")
+        assert response.status_code == 200
+
+        data = response.json()
+
+        # Check clients
+        assert len(data["clients"]) == 1
+        assert data["clients"][0]["client_id"] == "alice_001"
+        assert data["clients"][0]["client_name"] == "Alice's MARS"
+        assert data["clients"][0]["distribution"] == "mars"
+        # Verify no token in response
+        assert "token" not in data["clients"][0]
+
+        # Check destinations (from fixture)
+        assert len(data["destinations"]) == 1
+        assert data["destinations"][0]["id"] == "superdirt"
+        assert data["destinations"][0]["type"] == "osc"
+        assert data["destinations"][0]["host"] == "127.0.0.1"
+        assert data["destinations"][0]["port"] == 57120
+
+    def test_config_multiple_clients(self, client):
+        """Test that /config returns multiple clients."""
+        # Register multiple clients
+        client.post(
+            "/clients/alice_001",
+            json={"client_name": "Alice", "distribution": "mars"}
+        )
+        client.post(
+            "/clients/bob_002",
+            json={"client_name": "Bob", "distribution": "tidal"}
+        )
+
+        # Get config
+        response = client.get("/config")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert len(data["clients"]) == 2
+
+        # Verify both clients are present
+        client_ids = [c["client_id"] for c in data["clients"]]
+        assert "alice_001" in client_ids
+        assert "bob_002" in client_ids
+
+    def test_config_no_authentication_required(self, client):
+        """Test that /config does not require authentication."""
+        # Call without any auth headers
+        response = client.get("/config")
+        assert response.status_code == 200
+
+        # Should return valid data
+        data = response.json()
+        assert "environment" in data
+        assert "clients" in data
+        assert "destinations" in data
+
+
 class TestEndToEndFlow:
     """Test complete flow from API to message generation."""
 

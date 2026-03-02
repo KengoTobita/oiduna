@@ -1,7 +1,7 @@
 # Oiduna API Reference
 
 **Version**: 1.0
-**Last Updated**: 2026-02-24
+**Last Updated**: 2026-03-02
 **Base URL**: `http://localhost:57122`
 
 Complete reference for all Oiduna HTTP endpoints.
@@ -11,16 +11,17 @@ Complete reference for all Oiduna HTTP endpoints.
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Playback Control](#playback-control)
-3. [Realtime Trigger](#realtime-trigger)
-4. [Change Management](#change-management)
-5. [Client Metadata](#client-metadata)
-6. [Track Management](#track-management)
-7. [Scene Management](#scene-management)
-8. [MIDI Management](#midi-management)
-9. [Asset Management](#asset-management)
-10. [Server-Sent Events (SSE)](#server-sent-events-sse)
-11. [Error Handling](#error-handling)
+2. [Configuration Management](#configuration-management)
+3. [Playback Control](#playback-control)
+4. [Realtime Trigger](#realtime-trigger)
+5. [Change Management](#change-management)
+6. [Client Metadata](#client-metadata)
+7. [Track Management](#track-management)
+8. [Scene Management](#scene-management)
+9. [MIDI Management](#midi-management)
+10. [Asset Management](#asset-management)
+11. [Server-Sent Events (SSE)](#server-sent-events-sse)
+12. [Error Handling](#error-handling)
 
 ---
 
@@ -47,6 +48,98 @@ None required (local API).
 
 - **Swagger UI**: http://localhost:57122/docs
 - **ReDoc**: http://localhost:57122/redoc
+
+---
+
+## Configuration Management
+
+### GET /config
+
+Get Oiduna configuration and structural information (no authentication required).
+
+Returns environment settings, connected clients, and available destinations.
+This is the primary endpoint for client initialization.
+
+**Request**: None
+
+**Response** (200):
+```json
+{
+  "environment": {
+    "bpm": 120.0,
+    "metadata": {},
+    "position_update_interval": "beat",
+    "initial_metadata": {}
+  },
+  "loop_steps": 256,
+  "api_version": "1.0",
+  "clients": [
+    {
+      "client_id": "alice_001",
+      "client_name": "Alice's MARS",
+      "distribution": "mars"
+    }
+  ],
+  "destinations": [
+    {
+      "id": "superdirt",
+      "type": "osc",
+      "host": "127.0.0.1",
+      "port": 57120,
+      "address": "/dirt/play"
+    }
+  ]
+}
+```
+
+**Fields**:
+- `environment` (object): Current environment settings
+  - `bpm` (float): Current BPM
+  - `metadata` (object): Session metadata
+  - `position_update_interval` (string): SSE position event frequency ("beat" | "bar")
+- `loop_steps` (int): Fixed loop length (always 256)
+- `api_version` (string): API version for compatibility checking
+- `clients` (array): Connected clients (id, name, distribution only — no tokens/metadata)
+- `destinations` (array): Available destinations for track creation
+
+**Use Case**:
+- Client initialization
+- Discover who else is connected
+- Get available destinations for track creation
+- Check API compatibility
+
+**Example**:
+```bash
+curl http://localhost:57122/config
+```
+
+**Client Implementation Example**:
+```javascript
+// Initialization
+const config = await fetch('http://localhost:57122/config').then(r => r.json());
+
+// Check API compatibility
+if (config.api_version !== '1.0') {
+  console.warn('API version mismatch');
+}
+
+// Show connected clients
+console.log('Connected clients:');
+config.clients.forEach(c => {
+  console.log(`  - ${c.client_name} (${c.distribution})`);
+});
+
+// Build destination selector for track creation
+const destinationOptions = config.destinations.map(d => ({
+  value: d.id,
+  label: `${d.id} (${d.type})`
+}));
+
+// Validate destination before track creation
+function canUseDestination(destId) {
+  return config.destinations.some(d => d.id === destId);
+}
+```
 
 ---
 
@@ -115,37 +208,51 @@ curl -X POST http://localhost:57122/playback/session \
 
 ---
 
-### PATCH /playback/environment
+### PATCH /session/environment
 
-Update global environment settings.
+Update global environment settings (BPM, metadata, SSE configuration).
+
+Requires authentication.
 
 **Request**:
 ```json
 {
   "bpm": 140.0,
-  "swing": 0.1,
-  "default_gate": 0.9
+  "metadata": {
+    "key": "Dm",
+    "scale": "minor"
+  },
+  "position_update_interval": "bar"
 }
 ```
+
+**Fields** (all optional):
+- `bpm` (float): New BPM (20-999)
+- `metadata` (object): Metadata to merge (not replace)
+- `position_update_interval` (string): SSE position event frequency
+  - `"beat"`: Every 4 steps (default)
+  - `"bar"`: Every 16 steps (75% less network traffic)
 
 **Response** (200):
 ```json
 {
-  "status": "ok",
-  "environment": {
-    "bpm": 140.0,
-    "swing": 0.1,
-    "default_gate": 0.9,
-    "loop_steps": 256
-  }
+  "bpm": 140.0,
+  "metadata": {
+    "key": "Dm",
+    "scale": "minor"
+  },
+  "position_update_interval": "bar",
+  "initial_metadata": {}
 }
 ```
 
 **Example**:
 ```bash
-curl -X PATCH http://localhost:57122/playback/environment \
+curl -X PATCH http://localhost:57122/session/environment \
   -H "Content-Type: application/json" \
-  -d '{"bpm": 140.0}'
+  -H "X-Client-ID: alice_001" \
+  -H "X-Client-Token: <token>" \
+  -d '{"bpm": 140.0, "position_update_interval": "bar"}'
 ```
 
 ---
@@ -903,11 +1010,19 @@ data: {"timestamp": 1234567890.123}
 ```
 
 #### position
-Step/beat/bar position updates (sent every step).
+Step/beat/bar position updates.
+
+**Frequency** (configurable via `position_update_interval`):
+- `"beat"` (default): Every 4 steps (quarter note) — ~2 events/sec @ 120 BPM
+- `"bar"`: Every 16 steps (full bar) — ~0.5 events/sec @ 120 BPM
+
 ```
 event: position
 data: {"step": 64, "beat": 16, "bar": 4}
 ```
+
+**Note**: Clients can interpolate position between updates using BPM.
+See [Client Position Interpolation](#client-position-interpolation) for implementation example.
 
 #### status
 Playback state changes.
@@ -1199,6 +1314,58 @@ None currently implemented. Future consideration for production deployments.
 
 ---
 
+## Client Position Interpolation
+
+When using `position_update_interval: "bar"`, clients can interpolate position between SSE updates for smooth UI.
+
+### JavaScript Example
+
+```javascript
+// Get initial configuration
+const config = await fetch('/config').then(r => r.json());
+const bpm = config.environment.bpm;
+const stepDuration = 60 / (bpm * 4);  // Duration of one step in seconds
+
+// Track last known position from SSE
+let lastPosition = { step: 0, beat: 0, bar: 0 };
+let lastUpdateTime = Date.now();
+
+// SSE connection
+const eventSource = new EventSource('/stream');
+eventSource.addEventListener('position', (e) => {
+  const pos = JSON.parse(e.data);
+  lastPosition = pos;
+  lastUpdateTime = Date.now();
+});
+
+// Interpolate position (call at 60fps for smooth animation)
+function getInterpolatedPosition() {
+  const elapsed = (Date.now() - lastUpdateTime) / 1000;  // seconds
+  const estimatedStep = lastPosition.step + Math.floor(elapsed / stepDuration);
+
+  return {
+    step: estimatedStep % 256,
+    beat: Math.floor(estimatedStep / 4) % 4,
+    bar: Math.floor(estimatedStep / 16)
+  };
+}
+
+// Update UI at 60fps
+setInterval(() => {
+  const pos = getInterpolatedPosition();
+  updateProgressBar(pos.step / 256);
+  updateBeatIndicator(pos.beat);
+}, 16);  // ~60fps
+```
+
+### Accuracy Considerations
+
+- **BPM changes**: Fetch updated BPM from `environment_updated` SSE event
+- **Clock drift**: Interpolation accumulates slight error; reset on next SSE event
+- **Playback state**: Stop interpolation when `playback_state !== "playing"`
+
+---
+
 ## CORS
 
 Enabled for all origins in development. Configure for production deployments.
@@ -1206,5 +1373,5 @@ Enabled for all origins in development. Configure for production deployments.
 ---
 
 **Document Version**: 1.0
-**Last Updated**: 2026-02-24
+**Last Updated**: 2026-03-02
 **API Version**: 1.0
