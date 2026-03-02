@@ -1,7 +1,8 @@
 """POST/GET /playback/* - Playback control endpoints"""
 
 import logging
-from typing import Annotated
+from datetime import datetime, timezone
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Header
 from pydantic import BaseModel, Field
@@ -193,12 +194,19 @@ async def sync_session_to_engine(
     container: SessionContainer = Depends(get_container),
     loop_service: LoopService = Depends(get_loop_service),
     pipeline: ExtensionPipeline = Depends(get_pipeline),
+    x_session_version: Annotated[Optional[int], Header()] = None,
 ) -> dict:
     """
-    Sync session state to loop engine.
+    Sync session state to loop engine with optimistic locking.
 
     Compiles the current Session (tracks/patterns) into ScheduledMessageBatch
     and loads it into the loop engine.
+
+    This endpoint ensures atomic updates using version-based optimistic locking:
+    - Client sends the version number they started editing from
+    - If the session has been modified by another client (version mismatch),
+      returns 409 Conflict
+    - On success, increments the version and updates metadata
 
     This endpoint should be called after:
     - Creating/updating tracks
@@ -212,18 +220,49 @@ async def sync_session_to_engine(
         Headers:
             X-Client-ID: alice_001
             X-Client-Token: <token>
+            X-Session-Version: 5
 
-        Response:
+        Success Response (200):
         {
             "status": "synced",
+            "version": 6,
             "message_count": 42,
             "bpm": 120.0
+        }
+
+        Conflict Response (409):
+        {
+            "detail": {
+                "error": "session_conflict",
+                "message": "Session was modified by bob_002",
+                "current_version": 6,
+                "your_version": 5,
+                "last_modified_at": "2026-03-02T10:30:00Z"
+            }
         }
     """
     # Verify authentication
     client = container.clients.get(x_client_id)
     if not client or client.token != x_client_token:
         raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    # Version check (optimistic locking)
+    # If no version header provided, treat as 0 for backwards compatibility
+    client_version = x_session_version if x_session_version is not None else 0
+    current_version = container.session.version
+    if current_version != client_version:
+        conflict_detail = {
+            "error": "session_conflict",
+            "message": f"Session was modified by {container.session.last_modified_by or 'another client'}",
+            "current_version": current_version,
+            "your_version": client_version,
+            "last_modified_at": container.session.last_modified_at.isoformat() if container.session.last_modified_at else None,
+        }
+        logger.warning(
+            f"Version conflict: client={x_client_id}, expected={client_version}, "
+            f"current={current_version}, last_modified_by={container.session.last_modified_by}"
+        )
+        raise HTTPException(status_code=409, detail=conflict_detail)
 
     # Compile session to batch
     batch = SessionCompiler.compile(container.session)
@@ -253,8 +292,19 @@ async def sync_session_to_engine(
         else:
             raise HTTPException(status_code=500, detail=result.message)
 
+    # Update version metadata (successful sync)
+    container.session.version += 1
+    container.session.last_modified_by = x_client_id
+    container.session.last_modified_at = datetime.now(timezone.utc)
+
+    logger.info(
+        f"Session synced: client={x_client_id}, version={container.session.version}, "
+        f"messages={len(batch.messages)}"
+    )
+
     return {
         "status": "synced",
+        "version": container.session.version,
         "message_count": len(batch.messages),
         "bpm": batch.bpm,
     }

@@ -8,6 +8,8 @@ A Session is the single source of truth for:
 - Tracks (with Patterns and Events)
 """
 
+from datetime import datetime, timezone
+from typing import Optional
 from pydantic import BaseModel, Field
 from .environment import Environment
 from .client import ClientInfo
@@ -24,6 +26,7 @@ class Session(BaseModel):
     - Destinations: Available output destinations
     - Clients: Connected clients with tokens
     - Tracks: Musical tracks with patterns
+    - Version: Optimistic locking for concurrent updates
 
     Example:
         >>> session = Session(
@@ -41,6 +44,19 @@ class Session(BaseModel):
         ...     tracks={}
         ... )
     """
+
+    version: int = Field(
+        default=0,
+        description="Session version for optimistic locking (incremented on each sync)"
+    )
+    last_modified_by: Optional[str] = Field(
+        default=None,
+        description="Client ID who last modified the session"
+    )
+    last_modified_at: Optional[datetime] = Field(
+        default=None,
+        description="Timestamp of last modification (UTC)"
+    )
 
     environment: Environment = Field(
         default_factory=Environment,
@@ -63,6 +79,9 @@ class Session(BaseModel):
         "json_schema_extra": {
             "examples": [
                 {
+                    "version": 0,
+                    "last_modified_by": None,
+                    "last_modified_at": None,
                     "environment": {
                         "bpm": 120.0,
                         "metadata": {},

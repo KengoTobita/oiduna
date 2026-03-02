@@ -101,6 +101,7 @@ async def get_config(
         "environment": container.session.environment,
         "loop_steps": LOOP_STEPS,
         "api_version": "1.0",
+        "session_version": container.session.version,
         "clients": clients,
         "destinations": destinations,
     }
@@ -167,6 +168,9 @@ async def get_session_state(
 
     # Return session with sanitized clients
     return Session(
+        version=session.version,
+        last_modified_by=session.last_modified_by,
+        last_modified_at=session.last_modified_at,
         environment=session.environment,
         destinations=session.destinations,
         clients=session.clients,  # Will be sanitized in response model

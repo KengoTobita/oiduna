@@ -216,8 +216,9 @@ class TestPlaybackCommandIntegration:
             json={"track_name": "Kick", "destination_id": "superdirt", "base_params": {"sound": "bd"}}
         )
 
-        # Sync empty track
-        response = client.post("/playback/sync", headers=headers)
+        # Sync empty track (version 0)
+        sync_headers = {**headers, "X-Session-Version": "0"}
+        response = client.post("/playback/sync", headers=sync_headers)
         assert response.status_code == 200
 
         engine = mock_loop_service.get_engine()
@@ -235,13 +236,143 @@ class TestPlaybackCommandIntegration:
             }
         )
 
-        # Resync
-        response = client.post("/playback/sync", headers=headers)
+        # Resync (version 1 after previous sync)
+        sync_headers = {**headers, "X-Session-Version": "1"}
+        response = client.post("/playback/sync", headers=sync_headers)
         assert response.status_code == 200
 
         # Verify updated messages
         second_call = engine._handle_session.call_args[0][0]
         assert len(second_call["messages"]) == 1  # Pattern added
+
+    def test_sync_version_increment(self, client, mock_loop_service):
+        """
+        Test that successful sync increments session version.
+        """
+        # Setup
+        response = client.post("/clients/alice", json={"client_name": "Alice"})
+        token = response.json()["token"]
+        headers = {"X-Client-ID": "alice", "X-Client-Token": token}
+
+        client.post(
+            "/tracks/kick",
+            headers=headers,
+            json={"track_name": "Kick", "destination_id": "superdirt", "base_params": {"sound": "bd"}}
+        )
+
+        # Get initial version
+        from oiduna_api.dependencies import get_container
+        container = get_container()
+        initial_version = container.session.version
+        assert initial_version == 0
+
+        # First sync with version 0
+        headers_with_version = {**headers, "X-Session-Version": "0"}
+        response = client.post("/playback/sync", headers=headers_with_version)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["version"] == 1
+        assert container.session.version == 1
+        assert container.session.last_modified_by == "alice"
+
+        # Second sync with version 1
+        headers_with_version = {**headers, "X-Session-Version": "1"}
+        response = client.post("/playback/sync", headers=headers_with_version)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["version"] == 2
+        assert container.session.version == 2
+
+    def test_sync_version_conflict(self, client, mock_loop_service):
+        """
+        Test that sync with outdated version returns 409 Conflict.
+        """
+        # Setup two clients
+        response = client.post("/clients/alice", json={"client_name": "Alice"})
+        alice_token = response.json()["token"]
+        alice_headers = {"X-Client-ID": "alice", "X-Client-Token": alice_token}
+
+        response = client.post("/clients/bob", json={"client_name": "Bob"})
+        bob_token = response.json()["token"]
+        bob_headers = {"X-Client-ID": "bob", "X-Client-Token": bob_token}
+
+        # Setup track
+        client.post(
+            "/tracks/kick",
+            headers=alice_headers,
+            json={"track_name": "Kick", "destination_id": "superdirt", "base_params": {"sound": "bd"}}
+        )
+
+        # Alice syncs first (version 0 -> 1)
+        alice_sync_headers = {**alice_headers, "X-Session-Version": "0"}
+        response = client.post("/playback/sync", headers=alice_sync_headers)
+        assert response.status_code == 200
+        assert response.json()["version"] == 1
+
+        # Bob tries to sync with old version 0 -> 409 Conflict
+        bob_sync_headers = {**bob_headers, "X-Session-Version": "0"}
+        response = client.post("/playback/sync", headers=bob_sync_headers)
+        assert response.status_code == 409
+
+        error = response.json()["detail"]
+        assert error["error"] == "session_conflict"
+        assert error["current_version"] == 1
+        assert error["your_version"] == 0
+        assert "alice" in error["message"]
+
+        # Bob retries with correct version 1 -> success
+        bob_sync_headers = {**bob_headers, "X-Session-Version": "1"}
+        response = client.post("/playback/sync", headers=bob_sync_headers)
+        assert response.status_code == 200
+        assert response.json()["version"] == 2
+
+    def test_sync_concurrent_operations_atomicity(self, client, mock_loop_service):
+        """
+        Test that operations within a sync are atomic (no interleaving).
+
+        Scenario:
+        - Client C makes changes: C1→C2→C3
+        - Client D makes changes: D1→D2→D3
+        - Both sync with same initial version
+        - One succeeds (operations applied atomically)
+        - Other gets 409 (prevented from interleaving)
+        """
+        # Setup two clients
+        response = client.post("/clients/client_c", json={"client_name": "Client C"})
+        c_token = response.json()["token"]
+        c_headers = {"X-Client-ID": "client_c", "X-Client-Token": c_token}
+
+        response = client.post("/clients/client_d", json={"client_name": "Client D"})
+        d_token = response.json()["token"]
+        d_headers = {"X-Client-ID": "client_d", "X-Client-Token": d_token}
+
+        # Initial setup
+        client.post(
+            "/tracks/kick",
+            headers=c_headers,
+            json={"track_name": "Kick", "destination_id": "superdirt", "base_params": {"sound": "bd"}}
+        )
+
+        # Both clients remember version 0
+        initial_version = 0
+
+        # Client C syncs first (C1→C2→C3 applied atomically)
+        c_sync_headers = {**c_headers, "X-Session-Version": str(initial_version)}
+        response = client.post("/playback/sync", headers=c_sync_headers)
+        assert response.status_code == 200
+        assert response.json()["version"] == 1
+
+        # Client D tries to sync with version 0 (D1→D2→D3)
+        # This should fail because C already synced
+        d_sync_headers = {**d_headers, "X-Session-Version": str(initial_version)}
+        response = client.post("/playback/sync", headers=d_sync_headers)
+        assert response.status_code == 409  # Conflict!
+
+        # Verify C's operations were applied atomically (no interleaving with D)
+        error = response.json()["detail"]
+        assert error["current_version"] == 1
+        assert error["your_version"] == 0
+        assert "client_c" in error["message"]
 
 
 class TestRealTimeUpdates:
