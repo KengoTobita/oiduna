@@ -36,7 +36,10 @@ class Event(BaseModel):
     )
     params: dict[str, Any] = Field(
         default_factory=dict,
-        description="Event-specific parameters (merged with Track.base_params)"
+        description=(
+            "Event-specific parameters (merged with Track.base_params). "
+            "For MIDI destinations, see midi_helpers module for validation."
+        )
     )
 
     model_config = {

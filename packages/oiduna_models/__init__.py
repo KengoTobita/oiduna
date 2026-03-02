@@ -23,6 +23,12 @@ from .destination_models import (
     DestinationConfig,
 )
 from .loader import load_destinations, load_destinations_from_file
+from .midi_helpers import (
+    MidiParams,
+    MidiValidationError,
+    validate_midi_params,
+    is_valid_midi_params,
+)
 
 __all__ = [
     "Session",
@@ -37,4 +43,8 @@ __all__ = [
     "DestinationConfig",
     "load_destinations",
     "load_destinations_from_file",
+    "MidiParams",
+    "MidiValidationError",
+    "validate_midi_params",
+    "is_valid_midi_params",
 ]
