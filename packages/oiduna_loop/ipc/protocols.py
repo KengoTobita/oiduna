@@ -3,22 +3,33 @@ IPC Protocols
 
 Abstract interfaces for inter-process communication between oiduna_api and oiduna_loop.
 
-This module defines four protocol interfaces:
-- CommandSink: API side (sends commands to loop)
-- CommandSource: Loop side (receives commands from API)
-- StateSink: Loop side (sends state to API)
-- StateSource: API side (receives state from loop)
+This module defines IPC protocol interfaces using the Producer/Consumer pattern:
+- CommandProducer: API side (produces/sends commands to loop)
+- CommandConsumer: Loop side (consumes/receives commands from API)
+- StateProducer: Loop side (produces/sends state to API)
+- StateConsumer: API side (consumes/receives state from loop)
 
 Data Flow:
-    oiduna_api                    oiduna_loop
-    ──────────                    ───────────
-    CommandSink  ─── ZMQ ───►  CommandSource
-    StateSource  ◄── ZMQ ───   StateSink
+    oiduna_api                          oiduna_loop
+    ──────────                          ───────────
+    CommandProducer  ─── IPC ───►    CommandConsumer
+    StateConsumer    ◄─── IPC ───    StateProducer
+
+Terminology:
+    - "Producer" = Produces (sends) data
+    - "Consumer" = Consumes (receives) data
+
+Legacy Naming (DEPRECATED as of v2.1):
+    - CommandSink → CommandProducer
+    - CommandSource → CommandConsumer
+    - StateSink → StateProducer
+    - StateSource → StateConsumer
 """
 
 from __future__ import annotations
 
 from typing import Any, Callable, Protocol, runtime_checkable
+import warnings
 
 # =============================================================================
 # Command Channel: API → Loop
@@ -26,15 +37,17 @@ from typing import Any, Callable, Protocol, runtime_checkable
 
 
 @runtime_checkable
-class CommandSink(Protocol):
+class CommandProducer(Protocol):
     """
-    Command sender interface (API → Loop).
+    Command producer interface (API → Loop).
 
-    Used by oiduna_api to send commands to oiduna_loop.
+    Produces (sends) commands from oiduna_api to oiduna_loop.
 
     Implementations:
         - CommandSender: Real ZeroMQ PUB socket
         - Mock: Test double for unit tests
+
+    Methods produce commands that are consumed by CommandConsumer on the loop side.
     """
 
     def connect(self) -> None:
@@ -90,15 +103,17 @@ class CommandSink(Protocol):
 
 
 @runtime_checkable
-class CommandSource(Protocol):
+class CommandConsumer(Protocol):
     """
-    Command receiver interface (API → Loop).
+    Command consumer interface (API → Loop).
 
-    Used by oiduna_loop to receive commands from oiduna_api.
+    Consumes (receives) commands in oiduna_loop from oiduna_api.
 
     Implementations:
         - CommandReceiver: Real ZeroMQ SUB socket
-        - MockCommandSource: Test double for unit tests
+        - MockCommandSource: Test double for unit tests (note: legacy name)
+
+    Methods consume commands that were produced by CommandProducer on the API side.
     """
 
     def connect(self) -> None:
@@ -153,15 +168,18 @@ class CommandSource(Protocol):
 
 
 @runtime_checkable
-class StateSink(Protocol):
+class StateProducer(Protocol):
     """
-    State publisher interface (Loop → API).
+    State producer interface (Loop → API).
 
-    Used by oiduna_loop to send state updates to oiduna_api.
+    Produces (sends) state updates from oiduna_loop to oiduna_api.
 
     Implementations:
+        - InProcessStateSink: In-process queue-based implementation (note: legacy name)
         - StatePublisher: Real ZeroMQ PUB socket
-        - MockStateSink: Test double for unit tests
+        - MockStateSink: Test double for unit tests (note: legacy name)
+
+    Methods produce state updates that are consumed by StateConsumer on the API side.
     """
 
     def connect(self) -> None:
@@ -240,15 +258,17 @@ class StateSink(Protocol):
 
 
 @runtime_checkable
-class StateSource(Protocol):
+class StateConsumer(Protocol):
     """
-    State receiver interface (Loop → API).
+    State consumer interface (Loop → API).
 
-    Used by oiduna_api to receive state updates from oiduna_loop.
+    Consumes (receives) state updates in oiduna_api from oiduna_loop.
 
     Implementations:
         - StateReceiver: Real ZeroMQ SUB socket
         - Mock: Test double for unit tests
+
+    Methods consume state updates that were produced by StateProducer on the loop side.
     """
 
     def connect(self) -> None:
@@ -269,6 +289,201 @@ class StateSource(Protocol):
         Returns:
             (msg_type, payload) tuple or None if no message
         """
+        ...
+
+    @property
+    def is_connected(self) -> bool:
+        """Whether connected to state bus."""
+        ...
+
+
+# =============================================================================
+# Legacy Protocol Names (DEPRECATED as of v2.1)
+# =============================================================================
+
+
+@runtime_checkable
+class CommandSink(Protocol):
+    """
+    DEPRECATED: Use CommandProducer instead.
+
+    Command sender interface (API → Loop).
+    This protocol is maintained for backward compatibility.
+    Will be removed in v3.0.
+
+    Migration:
+        CommandSink → CommandProducer
+    """
+
+    def connect(self) -> None:
+        """Connect to command bus."""
+        ...
+
+    def disconnect(self) -> None:
+        """Disconnect from command bus."""
+        ...
+
+    def send(self, cmd_type: str, payload: dict[str, Any] | None = None) -> None:
+        """Send a command."""
+        ...
+
+    def send_compile(self, session_data: dict[str, Any]) -> None:
+        """Send compiled session to loop."""
+        ...
+
+    def send_play(self) -> None:
+        """Send play command."""
+        ...
+
+    def send_stop(self) -> None:
+        """Send stop command."""
+        ...
+
+    def send_pause(self) -> None:
+        """Send pause command."""
+        ...
+
+    def send_mute(self, track_id: str, mute: bool = True) -> None:
+        """Send mute command."""
+        ...
+
+    def send_solo(self, track_id: str, solo: bool = True) -> None:
+        """Send solo command."""
+        ...
+
+    def send_bpm(self, bpm: float) -> None:
+        """Send BPM change command."""
+        ...
+
+    @property
+    def is_connected(self) -> bool:
+        """Whether connected to command bus."""
+        ...
+
+
+@runtime_checkable
+class CommandSource(Protocol):
+    """
+    DEPRECATED: Use CommandConsumer instead.
+
+    Command receiver interface (API → Loop).
+    This protocol is maintained for backward compatibility.
+    Will be removed in v3.0.
+
+    Migration:
+        CommandSource → CommandConsumer
+    """
+
+    def connect(self) -> None:
+        """Connect to command source."""
+        ...
+
+    def disconnect(self) -> None:
+        """Disconnect from command source."""
+        ...
+
+    def register_handler(
+        self,
+        command_type: str,
+        handler: Callable[[dict[str, Any]], Any],
+    ) -> None:
+        """Register a handler for a command type."""
+        ...
+
+    async def receive(self) -> tuple[str, dict[str, Any]] | None:
+        """Receive a command."""
+        ...
+
+    async def process_commands(self) -> int:
+        """Process all pending commands."""
+        ...
+
+    @property
+    def is_connected(self) -> bool:
+        """Whether connected to command source."""
+        ...
+
+
+@runtime_checkable
+class StateSink(Protocol):
+    """
+    DEPRECATED: Use StateProducer instead.
+
+    State publisher interface (Loop → API).
+    This protocol is maintained for backward compatibility.
+    Will be removed in v3.0.
+
+    Migration:
+        StateSink → StateProducer
+    """
+
+    def connect(self) -> None:
+        """Connect to state sink."""
+        ...
+
+    def disconnect(self) -> None:
+        """Disconnect from state sink."""
+        ...
+
+    async def send(self, msg_type: str, payload: dict[str, Any]) -> None:
+        """Send state message."""
+        ...
+
+    async def send_position(
+        self,
+        position: dict[str, Any],
+        bpm: float | None = None,
+        transport: str | None = None,
+    ) -> None:
+        """Send position update."""
+        ...
+
+    async def send_status(
+        self,
+        transport: str,
+        bpm: float,
+        active_tracks: list[str],
+    ) -> None:
+        """Send status update."""
+        ...
+
+    async def send_error(self, code: str, message: str) -> None:
+        """Send error notification."""
+        ...
+
+    async def send_tracks(self, tracks: list[dict[str, Any]]) -> None:
+        """Send track information for Monitor display."""
+        ...
+
+    @property
+    def is_connected(self) -> bool:
+        """Whether connected to state sink."""
+        ...
+
+
+@runtime_checkable
+class StateSource(Protocol):
+    """
+    DEPRECATED: Use StateConsumer instead.
+
+    State receiver interface (Loop → API).
+    This protocol is maintained for backward compatibility.
+    Will be removed in v3.0.
+
+    Migration:
+        StateSource → StateConsumer
+    """
+
+    def connect(self) -> None:
+        """Connect to state bus."""
+        ...
+
+    def disconnect(self) -> None:
+        """Disconnect from state bus."""
+        ...
+
+    async def receive(self, timeout: int = 100) -> tuple[str, dict[str, Any]] | None:
+        """Receive a state message."""
         ...
 
     @property

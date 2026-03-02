@@ -36,7 +36,14 @@ from ..commands import (
     SoloCommand,
     StopCommand,
 )
-from ..protocols import CommandSource, MidiOutput, OscOutput, StateSink
+from ..protocols import (
+    CommandConsumer,
+    CommandSource,  # Legacy, for backward compatibility
+    MidiOutput,
+    OscOutput,
+    StateProducer,
+    StateSink,  # Legacy, for backward compatibility
+)
 from ..result import CommandResult
 from ..state import PlaybackState, RuntimeState
 from .clock_generator import ClockGenerator
@@ -94,8 +101,8 @@ class LoopEngine:
         self,
         osc: OscOutput,
         midi: MidiOutput,
-        commands: CommandSource,
-        publisher: StateSink,
+        command_consumer: CommandConsumer | CommandSource,
+        state_producer: StateProducer | StateSink,
         before_send_hooks: list[Callable[[list[ScheduledMessage], float, int], list[ScheduledMessage]]] | None = None,
     ):
         """
@@ -104,8 +111,10 @@ class LoopEngine:
         Args:
             osc: OSC output (OscSender or mock)
             midi: MIDI output (MidiSender or mock)
-            commands: Command source (CommandReceiver or mock)
-            publisher: State sink (StatePublisher or mock)
+            command_consumer: Command consumer (receives commands from API).
+                Accepts CommandConsumer (new) or CommandSource (legacy).
+            state_producer: State producer (sends state to API).
+                Accepts StateProducer (new) or StateSink (legacy).
             before_send_hooks: Optional hooks for message transformation before sending.
                 Each hook is called with (messages, current_bpm, current_step) -> messages.
                 Provided by extension system for runtime transformations (e.g., cps injection).
@@ -118,8 +127,12 @@ class LoopEngine:
         self._midi = midi
 
         # IPC (injected)
-        self._commands = commands
-        self._publisher = publisher
+        self._command_consumer = command_consumer
+        self._state_producer = state_producer
+
+        # Legacy aliases for backward compatibility
+        self._commands = command_consumer  # Deprecated alias
+        self._publisher = state_producer   # Deprecated alias
 
         # Processors (Martin Fowler: Extract Class)
         self._note_scheduler = NoteScheduler(self._midi)

@@ -19,11 +19,14 @@ _DEFAULT_QUEUE_SIZE = 128
 
 
 class NoopCommandSource:
-    """CommandSource that does nothing.
+    """No-op command consumer (CommandConsumer protocol).
 
+    Implements CommandConsumer protocol (formerly CommandSource).
     process_commands() always returns 0, so the _command_loop
     backoff path fires immediately and the task sleeps at full
     interval, consuming minimal CPU.
+
+    This class satisfies both CommandConsumer and CommandSource (legacy) protocols.
     """
 
     def connect(self) -> None:
@@ -49,12 +52,16 @@ class NoopCommandSource:
 
 
 class InProcessStateSink:
-    """StateSink backed by an asyncio.Queue.
+    """In-process state producer (StateProducer protocol).
 
-    The SSE endpoint reads from .queue; this class pushes events
-    into it.  When the queue is full the oldest entry is dropped
-    (drop-oldest) so a slow SSE consumer never back-pressures the
-    engine loop.
+    Implements StateProducer protocol (formerly StateSink).
+    Backed by an asyncio.Queue that the SSE endpoint reads from.
+    This class pushes (produces) state events into the queue.
+
+    When the queue is full the oldest entry is dropped (drop-oldest)
+    so a slow SSE consumer never back-pressures the engine loop.
+
+    This class satisfies both StateProducer and StateSink (legacy) protocols.
     """
 
     def __init__(self, maxsize: int = _DEFAULT_QUEUE_SIZE) -> None:
