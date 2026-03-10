@@ -25,7 +25,7 @@ class TimelineManager(BaseManager):
     - Integration with SessionContainer
 
     Example:
-        >>> manager = TimelineManager(session, event_sink)
+        >>> manager = TimelineManager(session, event_publisher)
         >>> success, msg, change_id = manager.schedule_change(
         ...     batch, 1000, "alice_001", "Alice", "Kick pattern", 500
         ... )
@@ -34,7 +34,7 @@ class TimelineManager(BaseManager):
     def __init__(
         self,
         session,
-        event_sink=None,
+        event_publisher=None,
         timeline: Optional[ScheduledChangeTimeline] = None,
     ):
         """
@@ -42,10 +42,10 @@ class TimelineManager(BaseManager):
 
         Args:
             session: Session instance (for consistency with other managers)
-            event_sink: Optional event sink for SSE notifications
+            event_publisher: Optional event publisher for SSE notifications
             timeline: Optional timeline instance (creates new if None)
         """
-        super().__init__(session, event_sink)
+        super().__init__(session, event_publisher)
         self.timeline = timeline or ScheduledChangeTimeline()
 
     def schedule_change(

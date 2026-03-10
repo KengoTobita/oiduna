@@ -137,7 +137,7 @@ class TestTrackManagerEvents:
         dm = DestinationManager(session)
         tm = TrackManager(
             session,
-            event_sink=MockEventSink(events),
+            event_publisher=MockEventSink(events),
             destination_manager=dm,
             client_manager=cm
         )
@@ -162,7 +162,7 @@ class TestTrackManagerEvents:
         dm = DestinationManager(session)
         tm = TrackManager(
             session,
-            event_sink=MockEventSink(events),
+            event_publisher=MockEventSink(events),
             destination_manager=dm,
             client_manager=cm
         )
@@ -188,7 +188,7 @@ class TestTrackManagerEvents:
         dm = DestinationManager(session)
         tm = TrackManager(
             session,
-            event_sink=MockEventSink(events),
+            event_publisher=MockEventSink(events),
             destination_manager=dm,
             client_manager=cm
         )
@@ -213,5 +213,5 @@ class MockEventSink:
     def __init__(self, events_list):
         self.events = events_list
 
-    def _push(self, event: dict) -> None:
+    def publish(self, event: dict) -> None:
         self.events.append(event)

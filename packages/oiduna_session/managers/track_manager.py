@@ -2,7 +2,7 @@
 
 from typing import Any, Optional
 from oiduna_models import Session, Track, IDGenerator
-from .base import BaseManager, SessionEventSink
+from .base import BaseManager, SessionEventPublisher
 from .client_manager import ClientManager
 from .destination_manager import DestinationManager
 
@@ -18,7 +18,7 @@ class TrackManager(BaseManager):
     def __init__(
         self,
         session: Session,
-        event_sink: Optional[SessionEventSink] = None,
+        event_publisher: Optional[SessionEventPublisher] = None,
         id_generator: Optional[IDGenerator] = None,
         destination_manager: Optional[DestinationManager] = None,
         client_manager: Optional[ClientManager] = None,
@@ -28,12 +28,12 @@ class TrackManager(BaseManager):
 
         Args:
             session: The session object to manage
-            event_sink: Optional event sink for emitting state changes
+            event_publisher: Optional event publisher for emitting state changes
             id_generator: Optional IDGenerator for creating unique track IDs
             destination_manager: Optional DestinationManager for validation
             client_manager: Optional ClientManager for validation
         """
-        super().__init__(session, event_sink)
+        super().__init__(session, event_publisher)
         self.id_generator = id_generator or IDGenerator()
         self.destination_manager = destination_manager
         self.client_manager = client_manager

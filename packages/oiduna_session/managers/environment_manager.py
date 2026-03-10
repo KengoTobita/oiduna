@@ -2,7 +2,7 @@
 
 from typing import Any, Optional
 from oiduna_models import Environment, Session
-from .base import BaseManager, SessionEventSink
+from .base import BaseManager, SessionEventPublisher
 
 
 class EnvironmentManager(BaseManager):
@@ -15,16 +15,16 @@ class EnvironmentManager(BaseManager):
     def __init__(
         self,
         session: Session,
-        event_sink: Optional[SessionEventSink] = None,
+        event_publisher: Optional[SessionEventPublisher] = None,
     ) -> None:
         """
         Initialize the EnvironmentManager.
 
         Args:
             session: The session object to manage
-            event_sink: Optional event sink for emitting state changes
+            event_publisher: Optional event publisher for emitting state changes
         """
-        super().__init__(session, event_sink)
+        super().__init__(session, event_publisher)
 
     def update(
         self,

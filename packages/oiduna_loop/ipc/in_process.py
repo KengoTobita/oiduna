@@ -52,16 +52,17 @@ class NoopCommandSource:
 
 
 class InProcessStateSink:
-    """In-process state producer (StateProducer protocol).
+    """In-process state producer and session event publisher.
 
-    Implements StateProducer protocol (formerly StateSink).
+    Implements two protocols:
+    - StateProducer: Loop layer state updates (position, status, error, etc.)
+    - SessionEventPublisher: Session layer CRUD events (track_created, pattern_updated, etc.)
+
     Backed by an asyncio.Queue that the SSE endpoint reads from.
-    This class pushes (produces) state events into the queue.
+    Both protocol types push events into the same unified queue.
 
     When the queue is full the oldest entry is dropped (drop-oldest)
     so a slow SSE consumer never back-pressures the engine loop.
-
-    This class satisfies both StateProducer and StateSink (legacy) protocols.
     """
 
     def __init__(self, maxsize: int = _DEFAULT_QUEUE_SIZE) -> None:
@@ -152,7 +153,7 @@ class InProcessStateSink:
     # ----------------------------------------------------------
 
     def _push(self, event: dict[str, Any]) -> None:
-        """Push event, dropping oldest if queue is full."""
+        """Push event, dropping oldest if queue is full (internal helper)."""
         try:
             self._queue.put_nowait(event)
         except asyncio.QueueFull:
@@ -165,3 +166,20 @@ class InProcessStateSink:
                 self._queue.put_nowait(event)
             except asyncio.QueueFull:
                 pass
+
+    # ----------------------------------------------------------
+    # SessionEventPublisher protocol method
+    # ----------------------------------------------------------
+
+    def publish(self, event: dict[str, Any]) -> None:
+        """
+        Publish a session event (SessionEventPublisher protocol).
+
+        This method implements the SessionEventPublisher protocol,
+        allowing Session layer managers to publish CRUD events.
+
+        Args:
+            event: Event dictionary with 'type' and 'data' keys
+                Example: {"type": "track_created", "data": {...}}
+        """
+        self._push(event)

@@ -108,7 +108,7 @@ class TestClientManagerEvents:
     def test_client_connected_event(self, session):
         """Test that client creation emits event."""
         events = []
-        client_manager = ClientManager(session, event_sink=MockEventSink(events))
+        client_manager = ClientManager(session, event_publisher=MockEventSink(events))
 
         client_manager.create("c1", "Alice", "mars")
 
@@ -120,7 +120,7 @@ class TestClientManagerEvents:
     def test_client_disconnected_event(self, session):
         """Test that client deletion emits event."""
         events = []
-        client_manager = ClientManager(session, event_sink=MockEventSink(events))
+        client_manager = ClientManager(session, event_publisher=MockEventSink(events))
 
         client_manager.create("c1", "Alice")
         events.clear()
@@ -138,5 +138,5 @@ class MockEventSink:
     def __init__(self, events_list):
         self.events = events_list
 
-    def _push(self, event: dict) -> None:
+    def publish(self, event: dict) -> None:
         self.events.append(event)

@@ -8,18 +8,18 @@ from oiduna_models import PatternEvent
 from oiduna_models import OscDestinationConfig
 
 
-class MockSessionEventSink:
+class MockSessionEventPublisher:
     """
-    Mock session event sink for testing.
+    Mock session event publisher for testing.
 
-    Implements SessionEventSink protocol for testing event emission.
+    Implements SessionEventPublisher protocol for testing event emission.
     """
 
     def __init__(self):
         self.events = []
 
-    def _push(self, event: dict) -> None:
-        """Record pushed events."""
+    def publish(self, event: dict) -> None:
+        """Publish and record events (SessionEventPublisher protocol)."""
         self.events.append(event)
 
     def clear(self):
@@ -32,14 +32,14 @@ class MockSessionEventSink:
 
 
 # Legacy alias for backward compatibility
-MockEventSink = MockSessionEventSink
+MockEventSink = MockSessionEventPublisher
 
 
 @pytest.fixture
 def manager_with_sink():
-    """Create container with mock session event sink."""
-    sink = MockSessionEventSink()
-    container = SessionContainer(event_sink=sink)
+    """Create container with mock session event publisher."""
+    sink = MockSessionEventPublisher()
+    container = SessionContainer(event_publisher=sink)
 
     # Add destination
     dest = OscDestinationConfig(
@@ -247,8 +247,8 @@ class TestEventSinkOptional:
     """Test that operations work without event sink."""
 
     def test_operations_without_sink(self):
-        """Test all operations work when event_sink is None."""
-        container = SessionContainer(event_sink=None)
+        """Test all operations work when event_publisher is None."""
+        container = SessionContainer(event_publisher=None)
 
         # Add destination
         dest = OscDestinationConfig(

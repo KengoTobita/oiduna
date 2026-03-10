@@ -3,7 +3,7 @@
 from __future__ import annotations
 from typing import Optional
 from oiduna_models import Session, Pattern, PatternEvent, IDGenerator
-from .base import BaseManager, SessionEventSink
+from .base import BaseManager, SessionEventPublisher
 from .track_manager import TrackManager
 from .client_manager import ClientManager
 
@@ -20,7 +20,7 @@ class PatternManager(BaseManager):
     def __init__(
         self,
         session: Session,
-        event_sink: Optional[SessionEventSink] = None,
+        event_publisher: Optional[SessionEventPublisher] = None,
         id_generator: Optional[IDGenerator] = None,
         track_manager: Optional[TrackManager] = None,
         client_manager: Optional[ClientManager] = None,
@@ -30,12 +30,12 @@ class PatternManager(BaseManager):
 
         Args:
             session: The session object to manage
-            event_sink: Optional event sink for emitting state changes
+            event_publisher: Optional event publisher for emitting state changes
             id_generator: Optional IDGenerator for creating unique pattern IDs
             track_manager: Optional TrackManager for track access
             client_manager: Optional ClientManager for validation
         """
-        super().__init__(session, event_sink)
+        super().__init__(session, event_publisher)
         self.id_generator = id_generator or IDGenerator()
         self.track_manager = track_manager
         self.client_manager = client_manager

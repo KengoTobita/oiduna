@@ -4,12 +4,12 @@ from typing import Any, Optional, Protocol
 from oiduna_models import Session
 
 
-class SessionEventSink(Protocol):
+class SessionEventPublisher(Protocol):
     """
-    Protocol for session event sinks.
+    Protocol for publishing session CRUD events.
 
-    Receives session-layer CRUD events (track_created, pattern_updated, etc.)
-    and forwards them to SSE endpoint for client notification.
+    Publishes session-layer CRUD events (track_created, pattern_updated, etc.)
+    to connected clients via SSE endpoint for real-time notification.
 
     This is distinct from StateProducer (Loop layer state updates like position, status).
 
@@ -23,9 +23,9 @@ class SessionEventSink(Protocol):
         - environment_updated
     """
 
-    def _push(self, event: dict[str, Any]) -> None:
+    def publish(self, event: dict[str, Any]) -> None:
         """
-        Push a session event to the sink.
+        Publish a session event to all connected clients.
 
         Args:
             event: Event dictionary with 'type' and 'data' keys
@@ -45,30 +45,30 @@ class BaseManager:
     def __init__(
         self,
         session: Session,
-        event_sink: Optional[SessionEventSink] = None,
+        event_publisher: Optional[SessionEventPublisher] = None,
     ) -> None:
         """
         Initialize the base manager.
 
         Args:
             session: The session object to manage
-            event_sink: Optional session event sink for emitting CRUD events.
-                Accepts SessionEventSink protocol.
+            event_publisher: Optional session event publisher for emitting CRUD events.
+                Accepts SessionEventPublisher protocol.
         """
         self.session = session
-        self.event_sink = event_sink
+        self.event_publisher = event_publisher
 
     def _emit_event(self, event_type: str, data: dict[str, Any]) -> None:
         """
-        Emit an SSE event if event_sink is configured.
+        Emit an SSE event if event_publisher is configured.
 
         Args:
             event_type: Type of the event (e.g., "client_created")
             data: Event data dictionary
         """
-        if self.event_sink:
+        if self.event_publisher:
             try:
-                self.event_sink._push({"type": event_type, "data": data})
+                self.event_publisher.publish({"type": event_type, "data": data})
             except Exception:
                 # Don't fail operations if event emission fails
                 pass
