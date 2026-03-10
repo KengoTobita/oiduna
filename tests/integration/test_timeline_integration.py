@@ -214,13 +214,14 @@ def test_permission_checks(container):
 def test_future_step_validation(container):
     """
     Test that scheduling for past/current step is rejected.
+    Also tests MIN_LOOKAHEAD enforcement (ADR-0020).
     """
     container.clients.create("client_001", "Alice", "mars")
 
     msg = ScheduledMessage("superdirt", 0.0, 0, {"s": "bd"})
     batch = ScheduledMessageBatch(messages=(msg,))
 
-    # Try to schedule for current step (should fail)
+    # Try to schedule for current step (should fail - below MIN_LOOKAHEAD)
     success, error_msg, _ = container.timeline.schedule_change(
         batch=batch,
         target_global_step=1000,
@@ -231,7 +232,7 @@ def test_future_step_validation(container):
     )
 
     assert success is False
-    assert "must be >" in error_msg
+    assert "最低" in error_msg and "ステップ先" in error_msg
 
     # Try to schedule for past step (should fail)
     success, error_msg, _ = container.timeline.schedule_change(
@@ -244,15 +245,40 @@ def test_future_step_validation(container):
     )
 
     assert success is False
-    assert "must be >" in error_msg
+    assert "最低" in error_msg or "ステップ先" in error_msg
 
-    # Valid future step should work
+    # Try to schedule just below MIN_LOOKAHEAD (should fail)
+    success, error_msg, _ = container.timeline.schedule_change(
+        batch=batch,
+        target_global_step=1007,  # Only 7 steps ahead (MIN=8)
+        client_id="client_001",
+        client_name="Alice",
+        description="Test",
+        current_global_step=1000,
+    )
+
+    assert success is False
+    assert "最低" in error_msg
+
+    # Valid future step (>= MIN_LOOKAHEAD) should work
+    success, error_msg, _ = container.timeline.schedule_change(
+        batch=batch,
+        target_global_step=1008,  # Exactly MIN_LOOKAHEAD
+        client_id="client_001",
+        client_name="Alice",
+        description="Test",
+        current_global_step=1000,
+    )
+
+    assert success is True
+
+    # Well into future should also work
     success, error_msg, _ = container.timeline.schedule_change(
         batch=batch,
         target_global_step=2000,
         client_id="client_001",
         client_name="Alice",
-        description="Test",
+        description="Test 2",
         current_global_step=1000,
     )
 

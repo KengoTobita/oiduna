@@ -99,6 +99,11 @@ class LoopEngine:
     COMMAND_POLL_MIN_INTERVAL: float = 0.001  # 1ms minimum (responsive)
     COMMAND_POLL_MAX_INTERVAL: float = 0.050  # 50ms maximum (TidalCycles-inspired)
 
+    # Timeline lookahead configuration (ADR-0020)
+    # Apply timeline changes N steps ahead to avoid blocking critical path
+    TIMELINE_LOOKAHEAD_STEPS: int = 32  # 2 bar lookahead (~8sec @ BPM 120)
+    TIMELINE_MIN_LOOKAHEAD: int = 8     # 2 beat minimum (~2sec @ BPM 120)
+
     def __init__(
         self,
         osc: OscOutput,
@@ -814,16 +819,18 @@ class LoopEngine:
         try:
             current_step = self.state.position.step
 
-            # Apply timeline changes (if any scheduled for this global step)
+            # Apply timeline changes with lookahead (ADR-0020)
+            # Load messages N steps ahead to avoid blocking critical path
             if self._timeline:
+                future_global_step = self._global_step + self.TIMELINE_LOOKAHEAD_STEPS
                 from oiduna_loop.engine.timeline_loader import TimelineLoader
                 TimelineLoader.apply_changes_at_step(
-                    self._global_step,
+                    future_global_step,
                     self._timeline,
                     self._message_scheduler,
                 )
 
-            # Get and filter messages
+            # Get and filter messages (already prepared by lookahead)
             messages = self._get_filtered_messages(current_step)
 
             if messages:

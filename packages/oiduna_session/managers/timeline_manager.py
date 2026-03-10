@@ -11,6 +11,9 @@ from oiduna_timeline import ScheduledChange, ScheduledChangeTimeline
 from oiduna_scheduler.scheduler_models import ScheduledMessageBatch
 from .base import BaseManager
 
+# Timeline lookahead configuration (from LoopEngine ADR-0020)
+TIMELINE_MIN_LOOKAHEAD = 8  # 2 beat minimum (~2sec @ BPM 120)
+
 
 class TimelineManager(BaseManager):
     """
@@ -59,7 +62,7 @@ class TimelineManager(BaseManager):
 
         Args:
             batch: The message batch to apply
-            target_global_step: When to apply (must be > current)
+            target_global_step: When to apply (must be > current + MIN_LOOKAHEAD)
             client_id: Client who scheduled this
             client_name: Human-readable client name
             description: User-provided description
@@ -71,6 +74,16 @@ class TimelineManager(BaseManager):
             - message: Error message if failed
             - change_id: UUID of scheduled change (None if failed)
         """
+        # Validate minimum lookahead (ADR-0020)
+        min_target = current_global_step + TIMELINE_MIN_LOOKAHEAD
+        if target_global_step < min_target:
+            return (
+                False,
+                f"予約は最低{TIMELINE_MIN_LOOKAHEAD}ステップ先（global_step {min_target}以降）に設定してください。"
+                f"現在: {current_global_step}, 指定: {target_global_step}",
+                None,
+            )
+
         # Create scheduled change
         change = ScheduledChange(
             target_global_step=target_global_step,
