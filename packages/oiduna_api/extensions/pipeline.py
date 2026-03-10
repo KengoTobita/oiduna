@@ -132,11 +132,7 @@ def discover_extensions() -> ExtensionPipeline:
     """
     pipeline = ExtensionPipeline()
 
-    try:
-        discovered = entry_points(group=ENTRY_POINT_GROUP)
-    except TypeError:
-        # Python 3.9 compatibility
-        discovered = entry_points().get(ENTRY_POINT_GROUP, [])
+    discovered = entry_points(group=ENTRY_POINT_GROUP)
 
     if not discovered:
         logger.info("No extensions found")

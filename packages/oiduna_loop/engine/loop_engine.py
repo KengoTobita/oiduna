@@ -38,11 +38,9 @@ from ..commands import (
 )
 from ..protocols import (
     CommandConsumer,
-    CommandSource,  # Legacy, for backward compatibility
     MidiOutput,
     OscOutput,
     StateProducer,
-    StateSink,  # Legacy, for backward compatibility
 )
 from ..result import CommandResult
 from ..state import PlaybackState, RuntimeState
@@ -53,23 +51,13 @@ from .session_loader import SessionLoader
 # New destination-based architecture imports
 from pathlib import Path
 
-try:
-    from oiduna_scheduler.scheduler_models import ScheduledMessageBatch, ScheduledMessage
-    from oiduna_scheduler.scheduler import MessageScheduler
-    from oiduna_scheduler.router import DestinationRouter
-    from oiduna_scheduler.senders import OscDestinationSender, MidiDestinationSender
-    from oiduna_models import OscDestinationConfig, MidiDestinationConfig
-    from oiduna_models import load_destinations_from_file
-    from oiduna_timeline import ScheduledChangeTimeline
-except ImportError:
-    # Fallback for local development
-    from oiduna_scheduler.scheduler_models import ScheduledMessageBatch, ScheduledMessage
-    from oiduna_scheduler.scheduler import MessageScheduler
-    from oiduna_scheduler.router import DestinationRouter
-    from oiduna_scheduler.senders import OscDestinationSender, MidiDestinationSender
-    from oiduna_models import OscDestinationConfig, MidiDestinationConfig
-    from oiduna_models import load_destinations_from_file
-    from oiduna_timeline import ScheduledChangeTimeline
+from oiduna_scheduler.scheduler_models import ScheduledMessageBatch, ScheduledMessage
+from oiduna_scheduler.scheduler import MessageScheduler
+from oiduna_scheduler.router import DestinationRouter
+from oiduna_scheduler.senders import OscDestinationSender, MidiDestinationSender
+from oiduna_models import OscDestinationConfig, MidiDestinationConfig
+from oiduna_models import load_destinations_from_file
+from oiduna_timeline import ScheduledChangeTimeline
 
 logger = logging.getLogger(__name__)
 
@@ -108,8 +96,8 @@ class LoopEngine:
         self,
         osc: OscOutput,
         midi: MidiOutput,
-        command_consumer: CommandConsumer | CommandSource,
-        state_producer: StateProducer | StateSink,
+        command_consumer: CommandConsumer,
+        state_producer: StateProducer,
         before_send_hooks: list[Callable[[list[ScheduledMessage], float, int], list[ScheduledMessage]]] | None = None,
     ):
         """
@@ -119,9 +107,7 @@ class LoopEngine:
             osc: OSC output (OscSender or mock)
             midi: MIDI output (MidiSender or mock)
             command_consumer: Command consumer (receives commands from API).
-                Accepts CommandConsumer (new) or CommandSource (legacy).
             state_producer: State producer (sends state to API).
-                Accepts StateProducer (new) or StateSink (legacy).
             before_send_hooks: Optional hooks for message transformation before sending.
                 Each hook is called with (messages, current_bpm, current_step) -> messages.
                 Provided by extension system for runtime transformations (e.g., cps injection).
@@ -136,10 +122,6 @@ class LoopEngine:
         # IPC (injected)
         self._command_consumer = command_consumer
         self._state_producer = state_producer
-
-        # Legacy aliases for backward compatibility
-        self._commands = command_consumer  # Deprecated alias
-        self._publisher = state_producer   # Deprecated alias
 
         # Processors (Martin Fowler: Extract Class)
         self._note_scheduler = NoteScheduler(self._midi)
@@ -208,8 +190,8 @@ class LoopEngine:
             logger.info("MIDI disabled (no ports available)")
 
         # Connect IPC
-        self._commands.connect()
-        self._publisher.connect()
+        self._command_consumer.connect()
+        self._state_producer.connect()
 
         # Initialize command handler BEFORE registering handlers
         if self._command_handler is None:
@@ -217,7 +199,7 @@ class LoopEngine:
                 state=self.state,
                 clock_generator=self._clock_generator,
                 note_scheduler=self._note_scheduler,
-                publisher=self._publisher,
+                publisher=self._state_producer,
                 midi_enabled=self._midi_enabled,
             )
 
@@ -240,8 +222,8 @@ class LoopEngine:
         # Disconnect
         self._osc.disconnect()
         self._midi.disconnect()
-        self._commands.disconnect()
-        self._publisher.disconnect()
+        self._command_consumer.disconnect()
+        self._state_producer.disconnect()
 
         logger.info("Loop engine stopped")
 
@@ -253,25 +235,25 @@ class LoopEngine:
                 state=self.state,
                 clock_generator=self._clock_generator,
                 note_scheduler=self._note_scheduler,
-                publisher=self._publisher,
+                publisher=self._state_producer,
                 midi_enabled=self._midi_enabled,
             )
 
         # Session loading (delegated to SessionLoader)
-        self._commands.register_handler("session", self._session_loader.load_session)
+        self._command_consumer.register_handler("session", self._session_loader.load_session)
 
         # Playback commands (delegated to CommandHandler via wrappers)
-        self._commands.register_handler("play", self._command_handler.handle_play)
-        self._commands.register_handler("stop", self._command_handler.handle_stop)
-        self._commands.register_handler("pause", self._command_handler.handle_pause)
-        self._commands.register_handler("mute", self._command_handler.handle_mute)
-        self._commands.register_handler("solo", self._command_handler.handle_solo)
-        self._commands.register_handler("bpm", self._command_handler.handle_bpm)
-        self._commands.register_handler("panic", self._handle_panic)  # Uses wrapper for additional logic
+        self._command_consumer.register_handler("play", self._command_handler.handle_play)
+        self._command_consumer.register_handler("stop", self._command_handler.handle_stop)
+        self._command_consumer.register_handler("pause", self._command_handler.handle_pause)
+        self._command_consumer.register_handler("mute", self._command_handler.handle_mute)
+        self._command_consumer.register_handler("solo", self._command_handler.handle_solo)
+        self._command_consumer.register_handler("bpm", self._command_handler.handle_bpm)
+        self._command_consumer.register_handler("panic", self._handle_panic)  # Uses wrapper for additional logic
 
         # MIDI-specific commands (remain in LoopEngine - need access to _midi)
-        self._commands.register_handler("midi_port", self._handle_midi_port)
-        self._commands.register_handler("midi_panic", self._handle_midi_panic)
+        self._command_consumer.register_handler("midi_port", self._handle_midi_port)
+        self._command_consumer.register_handler("midi_panic", self._handle_midi_panic)
 
     # ================================================================
     # Command Handlers
@@ -601,7 +583,7 @@ class LoopEngine:
             if self._connection_status[key] and not connected:
                 # Was connected, now disconnected -> send error
                 error_code = f"CONNECTION_LOST_{key.upper()}"
-                await self._publisher.send_error(
+                await self._state_producer.send_error(
                     error_code,
                     f"{key.upper()} connection lost"
                 )
@@ -616,7 +598,7 @@ class LoopEngine:
 
         Phase 4: This allows the API to detect if the loop engine is still alive.
         """
-        await self._publisher.send("heartbeat", {
+        await self._state_producer.send("heartbeat", {
             "timestamp": time.perf_counter(),
         })
 
@@ -662,7 +644,7 @@ class LoopEngine:
 
         while self._running:
             try:
-                processed = await self._commands.process_commands()
+                processed = await self._command_consumer.process_commands()
                 if processed > 0:
                     backoff = self.COMMAND_POLL_MIN_INTERVAL
                 else:
@@ -804,7 +786,7 @@ class LoopEngine:
         # "bar": every 16 steps (full bar)
         interval = 16 if self.state.position_update_interval == "bar" else 4
         if current_step % interval == 0:
-            await self._publisher.send_position(
+            await self._state_producer.send_position(
                 self.state.position.to_dict(),
                 bpm=self.state.bpm,
                 transport=self.state.playback_state.value,
@@ -812,7 +794,7 @@ class LoopEngine:
 
         # Send tracks info at bar boundaries for Monitor page sync
         if current_step % 16 == 0:
-            await self._publisher.send_tracks(self._get_tracks_info())
+            await self._state_producer.send_tracks(self._get_tracks_info())
 
     async def _execute_current_step(self) -> None:
         """Execute processing for current step."""
@@ -844,7 +826,7 @@ class LoopEngine:
 
         except Exception as e:
             logger.error(f"Step processing error: {e}\n{traceback.format_exc()}")
-            await self._publisher.send_error("STEP_ERROR", str(e))
+            await self._state_producer.send_error("STEP_ERROR", str(e))
 
     async def _wait_for_next_step(self) -> None:
         """
@@ -900,7 +882,7 @@ class LoopEngine:
         self._step_count = 0
 
         # Notify API about the drift reset
-        await self._publisher.send_error(
+        await self._state_producer.send_error(
             "CLOCK_DRIFT_RESET",
             f"Clock resynchronized (drift: {drift_ms:.1f}ms {direction}, skipped: ~{skipped_steps} steps)"
         )
@@ -987,7 +969,7 @@ class LoopEngine:
         """Send track information to API for Monitor display"""
         tracks_info = self._get_tracks_info()
         logger.info(f"Sending tracks info: {len(tracks_info)} tracks")
-        await self._publisher.send_tracks(tracks_info)
+        await self._state_producer.send_tracks(tracks_info)
 
     def _get_tracks_info(self) -> list[dict[str, Any]]:
         """
@@ -1005,16 +987,11 @@ class LoopEngine:
         """
         Convert events list to NibbleBeats pattern string (v5).
 
-        Works with both v5 Event objects and legacy dict events.
-
         Example: [Event(step=0), Event(step=4), ...] → "x8888"
         """
         pattern = [0, 0, 0, 0]  # 4 nibbles = 16 steps
         for event in events:
-            # Support both v5 Event objects and legacy dicts
-            step = getattr(event, "step", None)
-            if step is None:
-                step = event.get("step", 0) if isinstance(event, dict) else 0
+            step = event.step
 
             if 0 <= step < 16:
                 nibble_idx = step // 4
@@ -1024,7 +1001,7 @@ class LoopEngine:
 
     async def send_status(self) -> None:
         """Send current status to API"""
-        await self._publisher.send_status(
+        await self._state_producer.send_status(
             transport=self.state.playback_state.value,
             bpm=self.state.bpm,
             active_tracks=self.state.get_active_track_ids()
@@ -1047,9 +1024,9 @@ class LoopEngine:
     @property
     def commands(self) -> CommandSource:
         """Command source (for backward compatibility)"""
-        return self._commands
+        return self._command_consumer
 
     @property
     def publisher(self) -> StateSink:
         """State sink (for backward compatibility)"""
-        return self._publisher
+        return self._state_producer
