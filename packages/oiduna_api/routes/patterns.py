@@ -1,14 +1,14 @@
 """
-Pattern management routes.
+Pattern management routes (flat + hierarchical APIs).
 """
 
-from typing import Annotated
-from fastapi import APIRouter, Depends, Header, HTTPException
+from typing import Annotated, Optional
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from oiduna_api.dependencies import get_container
 from oiduna_session import SessionContainer, SessionValidator
-from oiduna_models import Pattern, Event
+from oiduna_models import Pattern, PatternEvent
 
 
 router = APIRouter()
@@ -17,15 +17,18 @@ router = APIRouter()
 # Request/Response models
 class PatternCreateRequest(BaseModel):
     """Request body for creating a pattern."""
+    track_id: Optional[str] = Field(None, description="Parent track ID (4-digit hex, required for flat API)")
     pattern_name: str = Field(..., min_length=1, description="Human-readable pattern name")
     active: bool = Field(default=True, description="Whether pattern is active")
-    events: list[Event] = Field(default_factory=list, description="Pattern events")
+    events: list[PatternEvent] = Field(default_factory=list, description="Pattern events")
 
 
 class PatternUpdateRequest(BaseModel):
     """Request body for updating a pattern."""
-    active: bool | None = Field(default=None, description="New active state")
-    events: list[Event] | None = Field(default=None, description="New events list")
+    track_id: Optional[str] = Field(None, description="New track ID (moves pattern)")
+    active: Optional[bool] = Field(None, description="New active state")
+    archived: Optional[bool] = Field(None, description="Soft delete/restore flag")
+    events: Optional[list[PatternEvent]] = Field(None, description="New events list")
 
 
 # Helper function for auth
@@ -41,30 +44,269 @@ async def verify_auth(
     return x_client_id
 
 
-# Routes
+# ============================================================================
+# FLAT PATTERN API (pattern_id only)
+# ============================================================================
+
 @router.get(
-    "/tracks/{track_id}/patterns",
+    "/patterns",
     response_model=list[Pattern],
-    summary="List all patterns in a track"
+    summary="List all patterns (flat API)"
 )
-async def list_patterns(
-    track_id: str,
+async def list_all_patterns(
+    x_client_id: Annotated[str, Header()],
+    x_client_token: Annotated[str, Header()],
+    container: SessionContainer = Depends(get_container),
+    include_archived: bool = Query(False, description="Include archived patterns"),
+):
+    """
+    List all patterns across all tracks.
+
+    Query Parameters:
+        include_archived: Include patterns with archived=True (default: false)
+
+    Examples:
+        GET /patterns
+        GET /patterns?include_archived=true
+
+    Returns:
+        List of patterns (archived=false by default)
+    """
+    await verify_auth(x_client_id, x_client_token, container)
+    return container.patterns.list_all(include_archived=include_archived)
+
+
+@router.get(
+    "/patterns/{pattern_id}",
+    response_model=Pattern,
+    summary="Get pattern by ID (flat API)"
+)
+async def get_pattern_by_id(
+    pattern_id: str,
     x_client_id: Annotated[str, Header()],
     x_client_token: Annotated[str, Header()],
     container: SessionContainer = Depends(get_container),
 ):
     """
-    List all patterns in a track.
+    Get pattern by pattern_id only (no track_id needed).
+
+    ⚠️  Returns pattern even if archived=True
 
     Example:
-        GET /tracks/track_001/patterns
+        GET /patterns/3e2b
         Headers:
-            X-Client-ID: alice_001
+            X-Client-ID: alice
             X-Client-Token: <token>
     """
     await verify_auth(x_client_id, x_client_token, container)
 
-    patterns = container.patterns.list(track_id)
+    pattern = container.patterns.get_by_id(pattern_id)
+    if pattern is None:
+        raise HTTPException(status_code=404, detail="Pattern not found")
+
+    return pattern
+
+
+@router.post(
+    "/patterns",
+    response_model=Pattern,
+    status_code=201,
+    summary="Create pattern (flat API)"
+)
+async def create_pattern_flat(
+    req: PatternCreateRequest,
+    x_client_id: Annotated[str, Header()],
+    x_client_token: Annotated[str, Header()],
+    container: SessionContainer = Depends(get_container),
+):
+    """
+    Create a new pattern with server-generated ID.
+
+    Request Body:
+        track_id: Required - parent track ID
+        pattern_name: Required - human-readable name
+        active: Optional (default: true)
+        events: Optional (default: [])
+
+    Example:
+        POST /patterns
+        Headers:
+            X-Client-ID: alice
+            X-Client-Token: <token>
+        Body:
+        {
+            "track_id": "0a1f",
+            "pattern_name": "main",
+            "active": true,
+            "events": []
+        }
+
+        Response:
+        {
+            "pattern_id": "3e2b",
+            "track_id": "0a1f",
+            "pattern_name": "main",
+            "client_id": "alice",
+            "active": true,
+            "archived": false,
+            "events": []
+        }
+    """
+    client_id = await verify_auth(x_client_id, x_client_token, container)
+
+    if not req.track_id:
+        raise HTTPException(status_code=400, detail="track_id is required for flat API")
+
+    try:
+        pattern = container.patterns.create(
+            track_id=req.track_id,
+            pattern_name=req.pattern_name,
+            client_id=client_id,
+            active=req.active,
+            events=req.events,
+        )
+        if pattern is None:
+            raise HTTPException(status_code=404, detail="Track not found")
+        return pattern
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.patch(
+    "/patterns/{pattern_id}",
+    response_model=Pattern,
+    summary="Update pattern (flat API)"
+)
+async def update_pattern_flat(
+    pattern_id: str,
+    req: PatternUpdateRequest,
+    x_client_id: Annotated[str, Header()],
+    x_client_token: Annotated[str, Header()],
+    container: SessionContainer = Depends(get_container),
+):
+    """
+    Update pattern by pattern_id.
+
+    ⚠️  Can update even if archived=True (for restoration)
+
+    Request Body (all optional):
+        track_id: Move pattern to different track
+        active: Change演奏ON/OFF state
+        archived: Soft delete/restore (true=archive, false=restore)
+        events: Replace events
+
+    Examples:
+        # Mute
+        PATCH /patterns/3e2b
+        Body: {"active": false}
+
+        # Restore from archive
+        PATCH /patterns/3e2b
+        Body: {"archived": false, "active": true}
+
+        # Move to different track (楽器入れ替え)
+        PATCH /patterns/3e2b
+        Body: {"track_id": "0b2c"}
+
+    Ownership:
+        Only pattern owner can update
+    """
+    client_id = await verify_auth(x_client_id, x_client_token, container)
+
+    # Check ownership
+    pattern = container.patterns.get_by_id(pattern_id)
+    if pattern is None:
+        raise HTTPException(status_code=404, detail="Pattern not found")
+    if pattern.client_id != client_id:
+        raise HTTPException(status_code=403, detail="You don't own this pattern")
+
+    # Update
+    try:
+        updated = container.patterns.update(
+            pattern_id=pattern_id,
+            track_id=req.track_id,
+            active=req.active,
+            archived=req.archived,
+            events=req.events,
+        )
+        return updated
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete(
+    "/patterns/{pattern_id}",
+    status_code=204,
+    summary="Delete pattern (flat API)"
+)
+async def delete_pattern_flat(
+    pattern_id: str,
+    x_client_id: Annotated[str, Header()],
+    x_client_token: Annotated[str, Header()],
+    container: SessionContainer = Depends(get_container),
+):
+    """
+    Soft delete a pattern (set archived=True).
+
+    Does not physically remove - just marks as archived.
+    Pattern can be restored via PATCH with {"archived": false}.
+
+    Ownership:
+        Only pattern owner can delete
+
+    Example:
+        DELETE /patterns/3e2b
+        Headers:
+            X-Client-ID: alice
+            X-Client-Token: <token>
+    """
+    client_id = await verify_auth(x_client_id, x_client_token, container)
+
+    # Check ownership
+    pattern = container.patterns.get_by_id(pattern_id)
+    if pattern is None:
+        raise HTTPException(status_code=404, detail="Pattern not found")
+    if pattern.client_id != client_id:
+        raise HTTPException(status_code=403, detail="You don't own this pattern")
+
+    # Soft delete
+    success = container.patterns.delete(pattern_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Pattern not found")
+
+
+# ============================================================================
+# HIERARCHICAL PATTERN API (track_id + pattern_id)
+# ============================================================================
+
+@router.get(
+    "/tracks/{track_id}/patterns",
+    response_model=list[Pattern],
+    summary="List patterns in track (hierarchical API)"
+)
+async def list_patterns_in_track(
+    track_id: str,
+    x_client_id: Annotated[str, Header()],
+    x_client_token: Annotated[str, Header()],
+    container: SessionContainer = Depends(get_container),
+    include_archived: bool = Query(False, description="Include archived patterns"),
+):
+    """
+    List all patterns in a track.
+
+    Query Parameters:
+        include_archived: Include patterns with archived=True
+
+    Example:
+        GET /tracks/0a1f/patterns
+        GET /tracks/0a1f/patterns?include_archived=true
+        Headers:
+            X-Client-ID: alice
+            X-Client-Token: <token>
+    """
+    await verify_auth(x_client_id, x_client_token, container)
+
+    patterns = container.patterns.list(track_id, include_archived=include_archived)
     if patterns is None:
         raise HTTPException(status_code=404, detail="Track not found")
 
@@ -74,9 +316,9 @@ async def list_patterns(
 @router.get(
     "/tracks/{track_id}/patterns/{pattern_id}",
     response_model=Pattern,
-    summary="Get pattern details"
+    summary="Get pattern (hierarchical API)"
 )
-async def get_pattern(
+async def get_pattern_hierarchical(
     track_id: str,
     pattern_id: str,
     x_client_id: Annotated[str, Header()],
@@ -84,12 +326,12 @@ async def get_pattern(
     container: SessionContainer = Depends(get_container),
 ):
     """
-    Get detailed information about a pattern.
+    Get pattern by track_id + pattern_id.
 
     Example:
-        GET /tracks/track_001/patterns/pattern_001
+        GET /tracks/0a1f/patterns/3e2b
         Headers:
-            X-Client-ID: alice_001
+            X-Client-ID: alice
             X-Client-Token: <token>
     """
     await verify_auth(x_client_id, x_client_token, container)
@@ -102,38 +344,36 @@ async def get_pattern(
 
 
 @router.post(
-    "/tracks/{track_id}/patterns/{pattern_id}",
+    "/tracks/{track_id}/patterns",
     response_model=Pattern,
     status_code=201,
-    summary="Create a new pattern"
+    summary="Create pattern (hierarchical API)"
 )
-async def create_pattern(
+async def create_pattern_hierarchical(
     track_id: str,
-    pattern_id: str,
     req: PatternCreateRequest,
     x_client_id: Annotated[str, Header()],
     x_client_token: Annotated[str, Header()],
     container: SessionContainer = Depends(get_container),
 ):
     """
-    Create a new pattern in a track.
+    Create a new pattern in a track with server-generated ID (hierarchical API).
 
-    The pattern will be owned by the authenticated client.
-    Note: Pattern ownership is independent of track ownership.
+    Request Body:
+        pattern_name: Required - human-readable name
+        active: Optional (default: true)
+        events: Optional (default: [])
 
     Example:
-        POST /tracks/track_001/patterns/pattern_001
+        POST /tracks/0a1f/patterns
         Headers:
-            X-Client-ID: alice_001
+            X-Client-ID: alice
             X-Client-Token: <token>
         Body:
         {
-            "pattern_name": "main_beat",
+            "pattern_name": "main",
             "active": true,
-            "events": [
-                {"step": 0, "cycle": 0.0, "params": {}},
-                {"step": 64, "cycle": 1.0, "params": {"gain": 0.9}}
-            ]
+            "events": []
         }
     """
     client_id = await verify_auth(x_client_id, x_client_token, container)
@@ -141,7 +381,6 @@ async def create_pattern(
     try:
         pattern = container.patterns.create(
             track_id=track_id,
-            pattern_id=pattern_id,
             pattern_name=req.pattern_name,
             client_id=client_id,
             active=req.active,
@@ -157,9 +396,9 @@ async def create_pattern(
 @router.patch(
     "/tracks/{track_id}/patterns/{pattern_id}",
     response_model=Pattern,
-    summary="Update a pattern"
+    summary="Update pattern (hierarchical API)"
 )
-async def update_pattern(
+async def update_pattern_hierarchical(
     track_id: str,
     pattern_id: str,
     req: PatternUpdateRequest,
@@ -168,50 +407,47 @@ async def update_pattern(
     container: SessionContainer = Depends(get_container),
 ):
     """
-    Update a pattern (active state and/or events).
+    Update pattern (hierarchical API).
 
-    Only the track owner can update patterns.
-    (This ensures track owners control all patterns in their tracks)
+    Request Body (all optional):
+        track_id: Move pattern to different track
+        active: Change演奏ON/OFF state
+        archived: Soft delete/restore (true=archive, false=restore)
+        events: Replace events
 
     Example:
-        PATCH /tracks/track_001/patterns/pattern_001
-        Headers:
-            X-Client-ID: alice_001
-            X-Client-Token: <token>
-        Body:
-        {
-            "active": false
-        }
+        PATCH /tracks/0a1f/patterns/3e2b
+        Body: {"active": false}
     """
     client_id = await verify_auth(x_client_id, x_client_token, container)
 
-    # Check track ownership (track owner can edit all patterns)
-    validator = SessionValidator()
-    if not validator.check_track_ownership(container.session, track_id, client_id):
-        raise HTTPException(
-            status_code=403,
-            detail="Only track owner can edit patterns"
-        )
-
-    # Update pattern
-    pattern = container.patterns.update(
-        track_id=track_id,
-        pattern_id=pattern_id,
-        active=req.active,
-        events=req.events,
-    )
+    # Check ownership
+    pattern = container.patterns.get_by_id(pattern_id)
     if pattern is None:
         raise HTTPException(status_code=404, detail="Pattern not found")
+    if pattern.client_id != client_id:
+        raise HTTPException(status_code=403, detail="You don't own this pattern")
 
-    return pattern
+    # Update
+    try:
+        updated = container.patterns.update(
+            pattern_id=pattern_id,
+            track_id=req.track_id,
+            active=req.active,
+            archived=req.archived,
+            events=req.events,
+        )
+        return updated
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.delete(
     "/tracks/{track_id}/patterns/{pattern_id}",
     status_code=204,
-    summary="Delete a pattern"
+    summary="Delete pattern (hierarchical API)"
 )
-async def delete_pattern(
+async def delete_pattern_hierarchical(
     track_id: str,
     pattern_id: str,
     x_client_id: Annotated[str, Header()],
@@ -219,27 +455,24 @@ async def delete_pattern(
     container: SessionContainer = Depends(get_container),
 ):
     """
-    Delete a pattern.
-
-    Only the track owner can delete patterns.
+    Soft delete a pattern (hierarchical API).
 
     Example:
-        DELETE /tracks/track_001/patterns/pattern_001
+        DELETE /tracks/0a1f/patterns/3e2b
         Headers:
-            X-Client-ID: alice_001
+            X-Client-ID: alice
             X-Client-Token: <token>
     """
     client_id = await verify_auth(x_client_id, x_client_token, container)
 
-    # Check track ownership
-    validator = SessionValidator()
-    if not validator.check_track_ownership(container.session, track_id, client_id):
-        raise HTTPException(
-            status_code=403,
-            detail="Only track owner can delete patterns"
-        )
+    # Check ownership
+    pattern = container.patterns.get_by_id(pattern_id)
+    if pattern is None:
+        raise HTTPException(status_code=404, detail="Pattern not found")
+    if pattern.client_id != client_id:
+        raise HTTPException(status_code=403, detail="You don't own this pattern")
 
-    # Delete pattern
-    success = container.patterns.delete(track_id, pattern_id)
+    # Soft delete
+    success = container.patterns.delete(pattern_id)
     if not success:
         raise HTTPException(status_code=404, detail="Pattern not found")

@@ -108,9 +108,9 @@ class TestTrackManagement:
     """Test track CRUD endpoints."""
 
     def test_create_track(self, client, auth_headers):
-        """Test creating a track."""
+        """Test creating a track with server-generated ID."""
         response = client.post(
-            "/tracks/track_001",
+            "/tracks",
             headers=auth_headers,
             json={
                 "track_name": "kick",
@@ -120,14 +120,19 @@ class TestTrackManagement:
         )
         assert response.status_code == 201
         data = response.json()
-        assert data["track_id"] == "track_001"
+
+        # Validate server-generated ID format (4-char hex, session-scoped)
+        track_id = data["track_id"]
+        assert len(track_id) == 4
+        assert all(c in "0123456789abcdef" for c in track_id)
+
         assert data["track_name"] == "kick"
         assert data["base_params"]["sound"] == "bd"
 
     def test_create_track_invalid_destination(self, client, auth_headers):
         """Test creating track with invalid destination fails."""
         response = client.post(
-            "/tracks/track_001",
+            "/tracks",
             headers=auth_headers,
             json={
                 "track_name": "kick",
@@ -140,7 +145,7 @@ class TestTrackManagement:
     def test_create_track_invalid_destination_format_with_space(self, client, auth_headers):
         """Test creating track with space in destination_id fails with 422."""
         response = client.post(
-            "/tracks/track_001",
+            "/tracks",
             headers=auth_headers,
             json={
                 "track_name": "kick",
@@ -156,7 +161,7 @@ class TestTrackManagement:
     def test_create_track_invalid_destination_format_with_special_char(self, client, auth_headers):
         """Test creating track with special char in destination_id fails with 422."""
         response = client.post(
-            "/tracks/track_001",
+            "/tracks",
             headers=auth_headers,
             json={
                 "track_name": "kick",
@@ -171,7 +176,7 @@ class TestTrackManagement:
     def test_create_track_valid_destination_format_succeeds(self, client, auth_headers):
         """Test creating track with valid destination_id format succeeds."""
         response = client.post(
-            "/tracks/track_001",
+            "/tracks",
             headers=auth_headers,
             json={
                 "track_name": "kick",
@@ -181,10 +186,15 @@ class TestTrackManagement:
         )
         assert response.status_code == 201
 
+        # Validate server-generated ID (4-char hex, session-scoped)
+        track_id = response.json()["track_id"]
+        assert len(track_id) == 4
+        assert all(c in "0123456789abcdef" for c in track_id)
+
     def test_create_track_valid_format_nonexistent_destination_returns_400(self, client, auth_headers):
         """Test valid format but nonexistent destination returns 400 (not 422)."""
         response = client.post(
-            "/tracks/track_001",
+            "/tracks",
             headers=auth_headers,
             json={
                 "track_name": "snare",
@@ -199,12 +209,12 @@ class TestTrackManagement:
         """Test listing tracks."""
         # Create two tracks
         client.post(
-            "/tracks/track_001",
+            "/tracks",
             headers=auth_headers,
             json={"track_name": "kick", "destination_id": "superdirt"}
         )
         client.post(
-            "/tracks/track_002",
+            "/tracks",
             headers=auth_headers,
             json={"track_name": "snare", "destination_id": "superdirt"}
         )
@@ -217,9 +227,9 @@ class TestTrackManagement:
 
     def test_update_track(self, client, auth_headers):
         """Test updating track base params."""
-        # Create track
-        client.post(
-            "/tracks/track_001",
+        # Create track and extract ID
+        create_response = client.post(
+            "/tracks",
             headers=auth_headers,
             json={
                 "track_name": "kick",
@@ -227,10 +237,11 @@ class TestTrackManagement:
                 "base_params": {"sound": "bd"}
             }
         )
+        track_id = create_response.json()["track_id"]
 
         # Update base params
         response = client.patch(
-            "/tracks/track_001",
+            f"/tracks/{track_id}",
             headers=auth_headers,
             json={"base_params": {"gain": 0.8}}
         )
@@ -241,19 +252,20 @@ class TestTrackManagement:
 
     def test_delete_track(self, client, auth_headers):
         """Test deleting a track."""
-        # Create track
-        client.post(
-            "/tracks/track_001",
+        # Create track and extract ID
+        create_response = client.post(
+            "/tracks",
             headers=auth_headers,
             json={"track_name": "kick", "destination_id": "superdirt"}
         )
+        track_id = create_response.json()["track_id"]
 
         # Delete track
-        response = client.delete("/tracks/track_001", headers=auth_headers)
+        response = client.delete(f"/tracks/{track_id}", headers=auth_headers)
         assert response.status_code == 204
 
-        # Verify deleted
-        response = client.get("/tracks/track_001", headers=auth_headers)
+        # Verify archived
+        response = client.get(f"/tracks/{track_id}", headers=auth_headers)
         assert response.status_code == 404
 
 
@@ -261,9 +273,12 @@ class TestPatternManagement:
     """Test pattern CRUD endpoints."""
 
     def test_create_pattern(self, client, auth_headers_with_track):
-        """Test creating a pattern."""
+        """Test creating a pattern with server-generated ID."""
+        # Get the track ID from the fixture
+        track_id = auth_headers_with_track["_track_id"]
+        
         response = client.post(
-            "/tracks/track_001/patterns/pattern_001",
+            f"/tracks/{track_id}/patterns",
             headers=auth_headers_with_track,
             json={
                 "pattern_name": "main",
@@ -276,22 +291,33 @@ class TestPatternManagement:
         )
         assert response.status_code == 201
         data = response.json()
-        assert data["pattern_id"] == "pattern_001"
+
+        # Validate server-generated pattern ID format (4-char hex, session-scoped)
+        pattern_id = data["pattern_id"]
+        assert len(pattern_id) == 4
+        assert all(c in "0123456789abcdef" for c in pattern_id)
+
         assert data["pattern_name"] == "main"
+        assert data["track_id"] == track_id  # Pattern has track_id field
+        assert data["archived"] is False  # Pattern has archived field
         assert len(data["events"]) == 2
 
     def test_update_pattern(self, client, auth_headers_with_track):
         """Test updating a pattern."""
-        # Create pattern
-        client.post(
-            "/tracks/track_001/patterns/pattern_001",
+        # Get the track ID from the fixture
+        track_id = auth_headers_with_track["_track_id"]
+        
+        # Create pattern and extract ID
+        create_response = client.post(
+            f"/tracks/{track_id}/patterns",
             headers=auth_headers_with_track,
             json={"pattern_name": "main", "active": True, "events": []}
         )
+        pattern_id = create_response.json()["pattern_id"]
 
         # Update pattern
         response = client.patch(
-            "/tracks/track_001/patterns/pattern_001",
+            f"/tracks/{track_id}/patterns/{pattern_id}",
             headers=auth_headers_with_track,
             json={"active": False}
         )
@@ -301,16 +327,20 @@ class TestPatternManagement:
 
     def test_delete_pattern(self, client, auth_headers_with_track):
         """Test deleting a pattern."""
-        # Create pattern
-        client.post(
-            "/tracks/track_001/patterns/pattern_001",
+        # Get the track ID from the fixture
+        track_id = auth_headers_with_track["_track_id"]
+        
+        # Create pattern and extract ID
+        create_response = client.post(
+            f"/tracks/{track_id}/patterns",
             headers=auth_headers_with_track,
             json={"pattern_name": "main", "active": True, "events": []}
         )
+        pattern_id = create_response.json()["pattern_id"]
 
         # Delete pattern
         response = client.delete(
-            "/tracks/track_001/patterns/pattern_001",
+            f"/tracks/{track_id}/patterns/{pattern_id}",
             headers=auth_headers_with_track
         )
         assert response.status_code == 204

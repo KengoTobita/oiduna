@@ -71,6 +71,28 @@ class Track(BaseModel):
         description="Patterns in this track (key = pattern_id)"
     )
 
+    @field_validator("track_id")
+    @classmethod
+    def validate_track_id_format(cls, v: str) -> str:
+        """
+        Validate track ID format (4-digit hexadecimal).
+
+        Args:
+            v: The track_id to validate
+
+        Returns:
+            The validated track_id
+
+        Raises:
+            ValueError: If track_id is not 4-digit hexadecimal
+        """
+        if not (len(v) == 4 and all(c in "0123456789abcdef" for c in v)):
+            raise ValueError(
+                f"track_id must be 4-digit hexadecimal (e.g., '0a1f'). "
+                f"Got: '{v}'"
+            )
+        return v
+
     @field_validator("destination_id")
     @classmethod
     def validate_destination_id_format(cls, v: str) -> str:

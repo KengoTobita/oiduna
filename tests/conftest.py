@@ -27,10 +27,15 @@ def auth_headers(client):
 
 @pytest.fixture
 def auth_headers_with_track(client, auth_headers):
-    """Create client and track, return auth headers."""
-    client.post(
-        "/tracks/track_001",
+    """Create client and track, return auth headers with track_id."""
+    response = client.post(
+        "/tracks",
         headers=auth_headers,
         json={"track_name": "kick", "destination_id": "superdirt"}
     )
+    # Extract server-generated track_id
+    track_id = response.json()["track_id"]
+    
+    # Add track_id to headers dict for easy access in tests
+    auth_headers["_track_id"] = track_id
     return auth_headers

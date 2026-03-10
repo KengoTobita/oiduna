@@ -123,25 +123,25 @@ async def get_track(
 
 
 @router.post(
-    "/tracks/{track_id}",
+    "/tracks",
     response_model=Track,
     status_code=201,
     summary="Create a new track"
 )
 async def create_track(
-    track_id: str,
     req: TrackCreateRequest,
     x_client_id: Annotated[str, Header()],
     x_client_token: Annotated[str, Header()],
     container: SessionContainer = Depends(get_container),
 ):
     """
-    Create a new track.
+    Create a new track with server-generated ID.
 
     The track will be owned by the authenticated client.
+    The server generates a unique 8-digit hexadecimal track_id.
 
     Example:
-        POST /tracks/track_001
+        POST /tracks
         Headers:
             X-Client-ID: alice_001
             X-Client-Token: <token>
@@ -151,12 +151,21 @@ async def create_track(
             "destination_id": "superdirt",
             "base_params": {"sound": "bd", "orbit": 0}
         }
+
+        Response:
+        {
+            "track_id": "a1b2c3d4",
+            "track_name": "kick",
+            "destination_id": "superdirt",
+            "client_id": "alice_001",
+            "base_params": {"sound": "bd", "orbit": 0},
+            "patterns": {}
+        }
     """
     client_id = await verify_auth(x_client_id, x_client_token, container)
 
     try:
         track = container.tracks.create(
-            track_id=track_id,
             track_name=req.track_name,
             destination_id=req.destination_id,
             client_id=client_id,

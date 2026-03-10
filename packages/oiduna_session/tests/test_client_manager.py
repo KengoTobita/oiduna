@@ -86,14 +86,14 @@ class TestClientManagerDeletion:
         # Create client and track
         client_manager.create("c1", "Alice")
         track = Track(
-            track_id="t1",
+            track_id="0a1f",
             track_name="kick",
             destination_id="sd",
             client_id="c1",
             base_params={},
             patterns={},
         )
-        session.tracks["t1"] = track
+        session.tracks["0a1f"] = track
 
         # Delete resources
         result = client_manager.delete_resources("c1")

@@ -4,7 +4,7 @@ Unit tests for SessionManager.
 
 import pytest
 from oiduna_session import SessionContainer
-from oiduna_models import Event
+from oiduna_models import PatternEvent
 from oiduna_models import OscDestinationConfig
 
 
@@ -85,13 +85,14 @@ class TestTrackCRUD:
     def test_create_track(self, container_with_client):
         """Test creating a track."""
         track = container_with_client.tracks.create(
-            track_id="track_001",
             track_name="kick",
             destination_id="superdirt",
             client_id="client_001",
             base_params={"sound": "bd"}
         )
-        assert track.track_id == "track_001"
+        # Validate track_id format (4-char hex, session-scoped)
+        assert len(track.track_id) == 4
+        assert all(c in "0123456789abcdef" for c in track.track_id)
         assert track.track_name == "kick"
         assert track.destination_id == "superdirt"
         assert track.client_id == "client_001"
@@ -101,7 +102,6 @@ class TestTrackCRUD:
         """Test creating track with invalid destination."""
         with pytest.raises(ValueError, match="does not exist"):
             container_with_client.tracks.create(
-                track_id="track_001",
                 track_name="kick",
                 destination_id="invalid",
                 client_id="client_001",
@@ -111,7 +111,6 @@ class TestTrackCRUD:
         """Test creating track with invalid client."""
         with pytest.raises(ValueError, match="does not exist"):
             container_with_destination.tracks.create(
-                track_id="track_001",
                 track_name="kick",
                 destination_id="superdirt",
                 client_id="invalid",
@@ -119,57 +118,55 @@ class TestTrackCRUD:
 
     def test_create_duplicate_track(self, container_with_client):
         """Test creating duplicate track fails."""
-        container_with_client.tracks.create(
-            track_id="track_001",
+        track1 = container_with_client.tracks.create(
             track_name="kick",
             destination_id="superdirt",
             client_id="client_001",
         )
-        with pytest.raises(ValueError, match="already exists"):
-            container_with_client.tracks.create(
-                track_id="track_001",
-                track_name="snare",
-                destination_id="superdirt",
-                client_id="client_001",
-            )
+        # Cannot create duplicate with same ID - but we removed track_id param,
+        # so each create() generates a unique ID. This test is no longer valid.
+        # We'll test that multiple tracks can be created instead.
+        track2 = container_with_client.tracks.create(
+            track_name="snare",
+            destination_id="superdirt",
+            client_id="client_001",
+        )
+        assert track1.track_id != track2.track_id
 
     def test_get_track(self, container_with_client):
         """Test getting a track."""
-        container_with_client.tracks.create(
-            track_id="track_001",
+        track = container_with_client.tracks.create(
             track_name="kick",
             destination_id="superdirt",
             client_id="client_001",
         )
-        track = container_with_client.tracks.get("track_001")
-        assert track is not None
-        assert track.track_id == "track_001"
+        retrieved = container_with_client.tracks.get(track.track_id)
+        assert retrieved is not None
+        assert retrieved.track_id == track.track_id
 
     def test_update_track_base_params(self, container_with_client):
         """Test updating track base params."""
-        container_with_client.tracks.create(
-            track_id="track_001",
+        track = container_with_client.tracks.create(
             track_name="kick",
             destination_id="superdirt",
             client_id="client_001",
             base_params={"sound": "bd"}
         )
-        track = container_with_client.tracks.update_base_params(
-            "track_001",
+        updated = container_with_client.tracks.update_base_params(
+            track.track_id,
             {"gain": 0.8}
         )
-        assert track.base_params == {"sound": "bd", "gain": 0.8}
+        assert updated.base_params == {"sound": "bd", "gain": 0.8}
 
     def test_delete_track(self, container_with_client):
         """Test deleting a track."""
-        container_with_client.tracks.create(
-            track_id="track_001",
+        track = container_with_client.tracks.create(
             track_name="kick",
             destination_id="superdirt",
             client_id="client_001",
         )
-        assert container_with_client.tracks.delete("track_001") is True
-        assert container_with_client.tracks.get("track_001") is None
+        assert container_with_client.tracks.delete(track.track_id) is True
+        assert container_with_client.tracks.get(track.track_id) is None
 
 
 class TestPatternCRUD:
@@ -178,35 +175,39 @@ class TestPatternCRUD:
     @pytest.fixture
     def container_with_track(self, container_with_client):
         """Manager with track."""
-        container_with_client.tracks.create(
-            track_id="track_001",
+        track = container_with_client.tracks.create(
             track_name="kick",
             destination_id="superdirt",
             client_id="client_001",
         )
+        # Store track for use in tests
+        container_with_client._test_track = track
         return container_with_client
 
     def test_create_pattern(self, container_with_track):
         """Test creating a pattern."""
-        events = [Event(step=0, cycle=0.0, params={})]
+        track = container_with_track._test_track
+        events = [PatternEvent(step=0, cycle=0.0, params={})]
         pattern = container_with_track.patterns.create(
-            track_id="track_001",
-            pattern_id="pattern_001",
+            track_id=track.track_id,
             pattern_name="main",
             client_id="client_001",
             active=True,
             events=events
         )
         assert pattern is not None
-        assert pattern.pattern_id == "pattern_001"
+        # Validate pattern_id format (4-char hex, session-scoped)
+        assert len(pattern.pattern_id) == 4
+        assert all(c in "0123456789abcdef" for c in pattern.pattern_id)
         assert pattern.pattern_name == "main"
+        assert pattern.track_id == track.track_id
+        assert pattern.archived is False
         assert len(pattern.events) == 1
 
     def test_create_pattern_invalid_track(self, container_with_client):
         """Test creating pattern with invalid track."""
         result = container_with_client.patterns.create(
             track_id="invalid",
-            pattern_id="pattern_001",
             pattern_name="main",
             client_id="client_001",
         )
@@ -214,44 +215,47 @@ class TestPatternCRUD:
 
     def test_get_pattern(self, container_with_track):
         """Test getting a pattern."""
-        container_with_track.patterns.create(
-            track_id="track_001",
-            pattern_id="pattern_001",
+        track = container_with_track._test_track
+        pattern = container_with_track.patterns.create(
+            track_id=track.track_id,
             pattern_name="main",
             client_id="client_001",
         )
-        pattern = container_with_track.patterns.get("track_001", "pattern_001")
-        assert pattern is not None
-        assert pattern.pattern_id == "pattern_001"
+        retrieved = container_with_track.patterns.get(track.track_id, pattern.pattern_id)
+        assert retrieved is not None
+        assert retrieved.pattern_id == pattern.pattern_id
 
     def test_update_pattern(self, container_with_track):
         """Test updating a pattern."""
-        container_with_track.patterns.create(
-            track_id="track_001",
-            pattern_id="pattern_001",
+        track = container_with_track._test_track
+        pattern = container_with_track.patterns.create(
+            track_id=track.track_id,
             pattern_name="main",
             client_id="client_001",
             active=True,
         )
-        pattern = container_with_track.patterns.update(
-            "track_001",
-            "pattern_001",
+        updated = container_with_track.patterns.update(
+            pattern.pattern_id,
             active=False,
-            events=[Event(step=0, cycle=0.0, params={"gain": 0.9})]
+            events=[PatternEvent(step=0, cycle=0.0, params={"gain": 0.9})]
         )
-        assert pattern.active is False
-        assert len(pattern.events) == 1
+        assert updated is not None
+        assert updated.active is False
+        assert len(updated.events) == 1
 
     def test_delete_pattern(self, container_with_track):
         """Test deleting a pattern."""
-        container_with_track.patterns.create(
-            track_id="track_001",
-            pattern_id="pattern_001",
+        track = container_with_track._test_track
+        pattern = container_with_track.patterns.create(
+            track_id=track.track_id,
             pattern_name="main",
             client_id="client_001",
         )
-        assert container_with_track.patterns.delete("track_001", "pattern_001") is True
-        assert container_with_track.patterns.get("track_001", "pattern_001") is None
+        assert container_with_track.patterns.delete(pattern.pattern_id) is True
+        # Pattern still exists but with archived=True (soft delete)
+        retrieved = container_with_track.patterns.get_by_id(pattern.pattern_id)
+        assert retrieved is not None
+        assert retrieved.archived is True
 
 
 class TestEnvironment:
@@ -274,8 +278,7 @@ class TestSessionReset:
     def test_reset(self, container_with_client):
         """Test resetting session."""
         # Add a track first
-        container_with_client.tracks.create(
-            track_id="track_001",
+        track = container_with_client.tracks.create(
             track_name="kick",
             destination_id="superdirt",
             client_id="client_001",

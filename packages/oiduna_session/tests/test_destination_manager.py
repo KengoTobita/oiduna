@@ -81,7 +81,6 @@ class TestDestinationManagerRemove:
         """Test removing destination in use raises ValueError."""
         # Add track using the destination
         container_with_client.tracks.create(
-            track_id="t1",
             track_name="kick",
             destination_id="superdirt",
             client_id="c1"
@@ -94,14 +93,12 @@ class TestDestinationManagerRemove:
     def test_remove_error_lists_using_tracks(self, container_with_client):
         """Test error message lists tracks using destination."""
         # Add multiple tracks using the destination
-        container_with_client.tracks.create(
-            track_id="t1",
+        track1 = container_with_client.tracks.create(
             track_name="kick",
             destination_id="superdirt",
             client_id="c1"
         )
-        container_with_client.tracks.create(
-            track_id="t2",
+        track2 = container_with_client.tracks.create(
             track_name="snare",
             destination_id="superdirt",
             client_id="c1"
@@ -112,8 +109,8 @@ class TestDestinationManagerRemove:
             container_with_client.destinations.remove("superdirt")
 
         error_msg = str(exc_info.value)
-        assert "t1" in error_msg
-        assert "t2" in error_msg
+        assert track1.track_id in error_msg
+        assert track2.track_id in error_msg
         assert "2 track(s)" in error_msg
 
     def test_remove_nonexistent_returns_false(self, dest_manager):
@@ -125,7 +122,6 @@ class TestDestinationManagerRemove:
         """Test error message includes helpful instructions."""
         # Add track
         container_with_client.tracks.create(
-            track_id="t1",
             track_name="kick",
             destination_id="superdirt",
             client_id="c1"

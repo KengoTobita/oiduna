@@ -8,13 +8,15 @@ A Session is the single source of truth for:
 - Tracks (with Patterns and Events)
 """
 
+import secrets
 from datetime import datetime, timezone
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 from .environment import Environment
 from .client import ClientInfo
 from .track import Track
 from .destination_models import DestinationConfig
+from .id_generator import IDGenerator
 
 
 class Session(BaseModel):
@@ -22,6 +24,7 @@ class Session(BaseModel):
     Complete session state - single source of truth.
 
     The Session contains all state for an Oiduna instance:
+    - Session ID: Unique identifier for this session
     - Environment: Global settings (BPM, metadata)
     - Destinations: Available output destinations
     - Clients: Connected clients with tokens
@@ -45,6 +48,10 @@ class Session(BaseModel):
         ... )
     """
 
+    session_id: str = Field(
+        default_factory=lambda: secrets.token_hex(4),
+        description="Unique session identifier (8-digit hex)"
+    )
     version: int = Field(
         default=0,
         description="Session version for optimistic locking (incremented on each sync)"
@@ -74,6 +81,9 @@ class Session(BaseModel):
         default_factory=dict,
         description="Musical tracks (key = track_id)"
     )
+
+    # Session単位のIDGenerator（シリアライズから除外）
+    _id_generator: IDGenerator = PrivateAttr(default_factory=IDGenerator)
 
     model_config = {
         "json_schema_extra": {

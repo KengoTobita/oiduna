@@ -4,8 +4,8 @@ Oiduna data models using Pydantic.
 This package contains the core hierarchical data models for Oiduna:
 - Session: Top-level container for all state
 - Track: Musical tracks with destination and base parameters
-- Pattern: Event sequences within tracks
-- Event: Individual scheduled events
+- Pattern: PatternEvent sequences within tracks
+- PatternEvent: Individual scheduled musical events
 - ClientInfo: Client authentication and metadata
 - Environment: Global session settings (BPM, metadata)
 """
@@ -13,7 +13,7 @@ This package contains the core hierarchical data models for Oiduna:
 from .session import Session
 from .track import Track
 from .pattern import Pattern
-from .events import Event
+from .events import PatternEvent
 from .client import ClientInfo
 from .environment import Environment
 from .id_generator import IDGenerator
@@ -34,7 +34,7 @@ __all__ = [
     "Session",
     "Track",
     "Pattern",
-    "Event",
+    "PatternEvent",
     "ClientInfo",
     "Environment",
     "IDGenerator",

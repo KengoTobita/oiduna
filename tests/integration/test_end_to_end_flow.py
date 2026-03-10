@@ -22,7 +22,7 @@ from oiduna_api.main import app
 from oiduna_api.dependencies import get_container
 from oiduna_session import SessionContainer, SessionCompiler
 from oiduna_models import OscDestinationConfig
-from oiduna_models import Event
+from oiduna_models import PatternEvent
 
 
 @pytest.fixture
@@ -157,8 +157,8 @@ class TestEndToEndFlow:
 
         Flow:
         1. Client registration (POST /clients/alice)
-        2. Track creation (POST /tracks/kick)
-        3. Pattern creation (POST /tracks/kick/patterns/main)
+        2. Track creation (POST /tracks)
+        3. Pattern creation (POST /tracks/{track_id}/patterns)
         4. Compile session → Verify generated messages
         """
         # Step 1: Register client
@@ -177,9 +177,9 @@ class TestEndToEndFlow:
             "X-Client-Token": token
         }
 
-        # Step 2: Create track
+        # Step 2: Create track (server generates ID)
         response = client.post(
-            "/tracks/kick",
+            "/tracks",
             headers=headers,
             json={
                 "track_name": "Kick Drum",
@@ -189,10 +189,10 @@ class TestEndToEndFlow:
         )
         assert response.status_code == 201
         track_data = response.json()
-        assert track_data["track_id"] == "kick"
+        track_id = track_data["track_id"]
         assert track_data["base_params"]["sound"] == "bd"
 
-        # Step 3: Create pattern with events
+        # Step 3: Create pattern with events (server generates ID)
         events = [
             {"step": 0, "cycle": 0.0, "params": {"n": 0}},
             {"step": 64, "cycle": 1.0, "params": {"n": 1, "gain": 0.9}},
@@ -200,7 +200,7 @@ class TestEndToEndFlow:
         ]
 
         response = client.post(
-            "/tracks/kick/patterns/main",
+            f"/tracks/{track_id}/patterns",
             headers=headers,
             json={
                 "pattern_name": "Main Pattern",
@@ -210,7 +210,7 @@ class TestEndToEndFlow:
         )
         assert response.status_code == 201
         pattern_data = response.json()
-        assert pattern_data["pattern_id"] == "main"
+        pattern_id = pattern_data["pattern_id"]
         assert len(pattern_data["events"]) == 3
 
         # Step 4: Compile session and verify messages
@@ -266,8 +266,8 @@ class TestEndToEndFlow:
         }
 
         # Create track 1: kick
-        client.post(
-            "/tracks/kick",
+        response = client.post(
+            "/tracks",
             headers=headers,
             json={
                 "track_name": "Kick",
@@ -275,10 +275,11 @@ class TestEndToEndFlow:
                 "base_params": {"sound": "bd", "orbit": 0}
             }
         )
+        kick_track_id = response.json()["track_id"]
 
         # Create track 2: snare
-        client.post(
-            "/tracks/snare",
+        response = client.post(
+            "/tracks",
             headers=headers,
             json={
                 "track_name": "Snare",
@@ -286,10 +287,11 @@ class TestEndToEndFlow:
                 "base_params": {"sound": "sd", "orbit": 1}
             }
         )
+        snare_track_id = response.json()["track_id"]
 
         # Add pattern to kick (every beat)
         client.post(
-            "/tracks/kick/patterns/main",
+            f"/tracks/{kick_track_id}/patterns",
             headers=headers,
             json={
                 "pattern_name": "Kick Pattern",
@@ -303,7 +305,7 @@ class TestEndToEndFlow:
 
         # Add pattern to snare (offbeat)
         client.post(
-            "/tracks/snare/patterns/main",
+            f"/tracks/{snare_track_id}/patterns",
             headers=headers,
             json={
                 "pattern_name": "Snare Pattern",
@@ -349,15 +351,16 @@ class TestEndToEndFlow:
         token = response.json()["token"]
         headers = {"X-Client-ID": "alice_001", "X-Client-Token": token}
 
-        client.post(
-            "/tracks/kick",
+        response = client.post(
+            "/tracks",
             headers=headers,
             json={"track_name": "Kick", "destination_id": "superdirt", "base_params": {"sound": "bd"}}
         )
+        track_id = response.json()["track_id"]
 
         # Create active pattern
         client.post(
-            "/tracks/kick/patterns/active",
+            f"/tracks/{track_id}/patterns",
             headers=headers,
             json={
                 "pattern_name": "Active",
@@ -368,7 +371,7 @@ class TestEndToEndFlow:
 
         # Create inactive pattern
         client.post(
-            "/tracks/kick/patterns/inactive",
+            f"/tracks/{track_id}/patterns",
             headers=headers,
             json={
                 "pattern_name": "Inactive",
@@ -404,13 +407,15 @@ class TestEndToEndFlow:
         assert response.json()["bpm"] == 140.0
 
         # Create track and pattern
-        client.post(
-            "/tracks/kick",
+        response = client.post(
+            "/tracks",
             headers=headers,
             json={"track_name": "Kick", "destination_id": "superdirt", "base_params": {"sound": "bd"}}
         )
+        track_id = response.json()["track_id"]
+
         client.post(
-            "/tracks/kick/patterns/main",
+            f"/tracks/{track_id}/patterns",
             headers=headers,
             json={
                 "pattern_name": "Main",
@@ -436,8 +441,8 @@ class TestEndToEndFlow:
         headers = {"X-Client-ID": "alice_001", "X-Client-Token": token}
 
         # Create track with base_params
-        client.post(
-            "/tracks/kick",
+        response = client.post(
+            "/tracks",
             headers=headers,
             json={
                 "track_name": "Kick",
@@ -450,10 +455,11 @@ class TestEndToEndFlow:
                 }
             }
         )
+        track_id = response.json()["track_id"]
 
         # Create pattern with event that overrides some params
         client.post(
-            "/tracks/kick/patterns/main",
+            f"/tracks/{track_id}/patterns",
             headers=headers,
             json={
                 "pattern_name": "Main",
@@ -530,17 +536,18 @@ class TestSSEEventEmission:
 
         # Create track
         response = client.post(
-            "/tracks/kick",
+            "/tracks",
             headers=headers,
             json={"track_name": "Kick", "destination_id": "superdirt"}
         )
         assert response.status_code == 201
+        track_id = response.json()["track_id"]
 
         # Verify event
         assert mock_sink._push.called
         event = mock_sink._push.call_args[0][0]
         assert event["type"] == "track_created"
-        assert event["data"]["track_id"] == "kick"
+        assert event["data"]["track_id"] == track_id
 
 
 class TestMessageContentValidation:
@@ -553,13 +560,15 @@ class TestMessageContentValidation:
         token = response.json()["token"]
         headers = {"X-Client-ID": "alice_001", "X-Client-Token": token}
 
-        client.post(
-            "/tracks/kick",
+        response = client.post(
+            "/tracks",
             headers=headers,
             json={"track_name": "Kick", "destination_id": "superdirt", "base_params": {"sound": "bd"}}
         )
+        track_id = response.json()["track_id"]
+
         client.post(
-            "/tracks/kick/patterns/main",
+            f"/tracks/{track_id}/patterns",
             headers=headers,
             json={
                 "pattern_name": "Main",
@@ -598,8 +607,8 @@ class TestMessageContentValidation:
         token = response.json()["token"]
         headers = {"X-Client-ID": "alice_001", "X-Client-Token": token}
 
-        client.post(
-            "/tracks/kick",
+        response = client.post(
+            "/tracks",
             headers=headers,
             json={
                 "track_name": "Kick",
@@ -607,8 +616,10 @@ class TestMessageContentValidation:
                 "base_params": {"sound": "bd", "n": 0, "gain": 0.8}
             }
         )
+        track_id = response.json()["track_id"]
+
         client.post(
-            "/tracks/kick/patterns/main",
+            f"/tracks/{track_id}/patterns",
             headers=headers,
             json={
                 "pattern_name": "Main",

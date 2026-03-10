@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from typing import Optional
-from oiduna_models import Session, Pattern, Event, IDGenerator
+from oiduna_models import Session, Pattern, PatternEvent, IDGenerator
 from .base import BaseManager, SessionEventSink
 from .track_manager import TrackManager
 from .client_manager import ClientManager
@@ -46,7 +46,7 @@ class PatternManager(BaseManager):
         pattern_name: str,
         client_id: str,
         active: bool = True,
-        events: Optional[list[Event]] = None,
+        events: Optional[list[PatternEvent]] = None,
     ) -> Optional[Pattern]:
         """
         Create a new pattern in a track with server-generated ID.
@@ -88,7 +88,7 @@ class PatternManager(BaseManager):
         pattern_name: str,
         client_id: str,
         active: bool,
-        events: Optional[list[Event]],
+        events: Optional[list[PatternEvent]],
     ) -> Pattern:
         """Build a new Pattern object with generated ID."""
         pattern_id = self.id_generator.generate_pattern_id()
@@ -199,7 +199,7 @@ class PatternManager(BaseManager):
         track_id: Optional[str] = None,
         active: Optional[bool] = None,
         archived: Optional[bool] = None,
-        events: Optional[list[Event]] = None,
+        events: Optional[list[PatternEvent]] = None,
     ) -> Optional[Pattern]:
         """
         Update pattern fields (flat API).

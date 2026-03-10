@@ -11,7 +11,7 @@ from oiduna_models import Session
 from oiduna_scheduler.scheduler_models import ScheduledMessage, ScheduledMessageBatch
 
 if TYPE_CHECKING:
-    from oiduna_models import Track, Event
+    from oiduna_models import Track, PatternEvent
 
 
 class SessionCompiler:
@@ -38,7 +38,7 @@ class SessionCompiler:
 
     @staticmethod
     def _create_message_from_event(
-        track: "Track", event: "Event"
+        track: "Track", event: "PatternEvent"
     ) -> ScheduledMessage:
         """
         Create a ScheduledMessage from a Track and Event.

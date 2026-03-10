@@ -4,7 +4,7 @@ Unit tests for SessionCompiler.
 
 import pytest
 from oiduna_session import SessionCompiler, SessionContainer
-from oiduna_models import Event
+from oiduna_models import PatternEvent
 from oiduna_models import OscDestinationConfig
 
 
@@ -24,27 +24,25 @@ def container():
     container.destinations.add(dest)
 
     # Add client
-    container.clients.create("client_001", "Alice", "mars")
+    client = container.clients.create("client_001", "Alice", "mars")
 
-    # Add track with base params
-    container.tracks.create(
-        track_id="track_001",
+    # Add track with base params (no hardcoded track_id)
+    track = container.tracks.create(
         track_name="kick",
         destination_id="superdirt",
-        client_id="client_001",
+        client_id=client.client_id,
         base_params={"sound": "bd", "orbit": 0}
     )
 
-    # Add pattern with events
+    # Add pattern with events (no hardcoded pattern_id)
     events = [
-        Event(step=0, cycle=0.0, params={}),
-        Event(step=64, cycle=1.0, params={"gain": 0.9}),
+        PatternEvent(step=0, cycle=0.0, params={}),
+        PatternEvent(step=64, cycle=1.0, params={"gain": 0.9}),
     ]
-    container.patterns.create(
-        track_id="track_001",
-        pattern_id="pattern_001",
+    pattern = container.patterns.create(
+        track_id=track.track_id,
         pattern_name="main",
-        client_id="client_001",
+        client_id=client.client_id,
         active=True,
         events=events
     )
@@ -68,6 +66,9 @@ class TestSessionCompiler:
         assert len(batch.messages) == 2
         assert batch.bpm == 120.0
 
+        # Get track_id dynamically
+        track_id = list(container.session.tracks.keys())[0]
+
         # Check first message
         msg = batch.messages[0]
         assert msg.destination_id == "superdirt"
@@ -75,7 +76,7 @@ class TestSessionCompiler:
         assert msg.cycle == 0.0
         assert msg.params["sound"] == "bd"
         assert msg.params["orbit"] == 0
-        assert msg.params["track_id"] == "track_001"
+        assert msg.params["track_id"] == track_id
 
         # Check second message (event params override base params)
         msg = batch.messages[1]
@@ -86,29 +87,53 @@ class TestSessionCompiler:
 
     def test_compile_with_inactive_pattern(self, container):
         """Test inactive patterns are skipped."""
-        # Set pattern inactive
-        container.patterns.update("track_001", "pattern_001", active=False)
+        # Get dynamic IDs
+        track_id = list(container.session.tracks.keys())[0]
+        pattern_id = list(container.session.tracks[track_id].patterns.keys())[0]
 
+        # Set pattern inactive (flat API)
+        container.patterns.update(pattern_id, active=False)
+
+        batch = SessionCompiler.compile(container.session)
+        assert len(batch.messages) == 0
+
+    def test_compile_with_archived_pattern(self, container):
+        """Test archived patterns are skipped (even if active=True)."""
+        # Get dynamic IDs
+        track_id = list(container.session.tracks.keys())[0]
+        pattern_id = list(container.session.tracks[track_id].patterns.keys())[0]
+
+        # Soft delete pattern (but keep active=True)
+        container.patterns.update(pattern_id, archived=True)
+
+        # Verify pattern still exists with archived=True
+        pattern = container.patterns.get_by_id(pattern_id)
+        assert pattern is not None
+        assert pattern.archived is True
+        assert pattern.active is True  # Still active but archived
+
+        # Compile should skip archived patterns
         batch = SessionCompiler.compile(container.session)
         assert len(batch.messages) == 0
 
     def test_compile_multiple_tracks(self, container):
         """Test compiling multiple tracks."""
+        # Get first client
+        client_id = list(container.session.clients.keys())[0]
+        
         # Add second track
-        container.tracks.create(
-            track_id="track_002",
+        track2 = container.tracks.create(
             track_name="snare",
             destination_id="superdirt",
-            client_id="client_001",
+            client_id=client_id,
             base_params={"sound": "sd"}
         )
         container.patterns.create(
-            track_id="track_002",
-            pattern_id="pattern_002",
+            track_id=track2.track_id,
             pattern_name="main",
-            client_id="client_001",
+            client_id=client_id,
             active=True,
-            events=[Event(step=128, cycle=2.0, params={})]
+            events=[PatternEvent(step=128, cycle=2.0, params={})]
         )
 
         batch = SessionCompiler.compile(container.session)
@@ -116,13 +141,16 @@ class TestSessionCompiler:
 
     def test_compile_track(self, container):
         """Test compiling a single track."""
-        messages = SessionCompiler.compile_track(container.session, "track_001")
+        # Get dynamic track_id
+        track_id = list(container.session.tracks.keys())[0]
+        
+        messages = SessionCompiler.compile_track(container.session, track_id)
         assert len(messages) == 2
 
         msg = messages[0]
         assert msg.destination_id == "superdirt"
         assert msg.params["sound"] == "bd"
-        assert msg.params["track_id"] == "track_001"
+        assert msg.params["track_id"] == track_id
 
     def test_compile_track_not_found(self, container):
         """Test compiling nonexistent track."""
@@ -148,15 +176,15 @@ class TestSessionCompilerValidation:
         container = SessionContainer()
 
         # Add client
-        container.clients.create("client_001", "Alice", "mars")
+        client = container.clients.create("client_001", "Alice", "mars")
 
         # Manually create track with invalid destination (bypass manager validation)
         from oiduna_models import Track
-        container.session.tracks["track_001"] = Track(
-            track_id="track_001",
+        container.session.tracks["0a1f"] = Track(
+            track_id="0a1f",
             track_name="kick",
             destination_id="nonexistent",
-            client_id="client_001",
+            client_id=client.client_id,
             base_params={},
             patterns={}
         )
@@ -167,30 +195,30 @@ class TestSessionCompilerValidation:
     def test_compile_error_lists_invalid_tracks(self):
         """Error message lists all invalid track→destination."""
         container = SessionContainer()
-        container.clients.create("client_001", "Alice", "mars")
+        client = container.clients.create("client_001", "Alice", "mars")
 
         from oiduna_models import Track
 
         # Add two tracks with invalid destinations
-        container.session.tracks["track_001"] = Track(
-            track_id="track_001",
+        container.session.tracks["0a1f"] = Track(
+            track_id="0a1f",
             track_name="kick",
             destination_id="dest1",
-            client_id="client_001"
+            client_id=client.client_id
         )
-        container.session.tracks["track_002"] = Track(
-            track_id="track_002",
+        container.session.tracks["3e2b"] = Track(
+            track_id="3e2b",
             track_name="snare",
             destination_id="dest2",
-            client_id="client_001"
+            client_id=client.client_id
         )
 
         with pytest.raises(ValueError) as exc_info:
             SessionCompiler.compile(container.session)
 
         error_msg = str(exc_info.value)
-        assert "track_001→dest1" in error_msg
-        assert "track_002→dest2" in error_msg
+        assert "0a1f→dest1" in error_msg
+        assert "3e2b→dest2" in error_msg
 
     def test_compile_error_lists_available_destinations(self):
         """Error message includes available destinations."""
@@ -207,15 +235,15 @@ class TestSessionCompilerValidation:
         container.destinations.add(dest)
 
         # Add client
-        container.clients.create("client_001", "Alice", "mars")
+        client = container.clients.create("client_001", "Alice", "mars")
 
         # Add track with invalid destination
         from oiduna_models import Track
-        container.session.tracks["track_001"] = Track(
-            track_id="track_001",
+        container.session.tracks["0a1f"] = Track(
+            track_id="0a1f",
             track_name="kick",
             destination_id="invalid",
-            client_id="client_001"
+            client_id=client.client_id
         )
 
         with pytest.raises(ValueError) as exc_info:
@@ -240,14 +268,13 @@ class TestSessionCompilerValidation:
         container.destinations.add(dest)
 
         # Add client
-        container.clients.create("client_001", "Alice", "mars")
+        client = container.clients.create("client_001", "Alice", "mars")
 
         # Add track with valid destination
-        container.tracks.create(
-            track_id="track_001",
+        track = container.tracks.create(
             track_name="kick",
             destination_id="superdirt",
-            client_id="client_001"
+            client_id=client.client_id
         )
 
         # Should not raise
@@ -269,28 +296,28 @@ class TestSessionCompilerValidation:
             )
             container.destinations.add(dest)
 
-        container.clients.create("client_001", "Alice", "mars")
+        client = container.clients.create("client_001", "Alice", "mars")
 
         from oiduna_models import Track
 
         # Add tracks with mix of valid and invalid destinations
-        container.session.tracks["track_001"] = Track(
-            track_id="track_001",
+        container.session.tracks["0a1f"] = Track(
+            track_id="0a1f",
             track_name="kick",
             destination_id="superdirt",  # Valid
-            client_id="client_001"
+            client_id=client.client_id
         )
-        container.session.tracks["track_002"] = Track(
-            track_id="track_002",
+        container.session.tracks["3e2b"] = Track(
+            track_id="3e2b",
             track_name="snare",
             destination_id="invalid1",  # Invalid
-            client_id="client_001"
+            client_id=client.client_id
         )
-        container.session.tracks["track_003"] = Track(
-            track_id="track_003",
+        container.session.tracks["5678"] = Track(
+            track_id="5678",
             track_name="hihat",
             destination_id="invalid2",  # Invalid
-            client_id="client_001"
+            client_id=client.client_id
         )
 
         with pytest.raises(ValueError) as exc_info:
@@ -298,7 +325,7 @@ class TestSessionCompilerValidation:
 
         error_msg = str(exc_info.value)
         # Should list both invalid references
-        assert "track_002→invalid1" in error_msg
-        assert "track_003→invalid2" in error_msg
+        assert "3e2b→invalid1" in error_msg
+        assert "5678→invalid2" in error_msg
         # Should NOT list the valid one
-        assert "track_001" not in error_msg
+        assert "0a1f" not in error_msg

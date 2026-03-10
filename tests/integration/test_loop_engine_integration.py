@@ -67,8 +67,8 @@ class TestLoopEngineMessageFormat:
         token = response.json()["token"]
         headers = {"X-Client-ID": "alice", "X-Client-Token": token}
 
-        client.post(
-            "/tracks/kick",
+        response = client.post(
+            "/tracks",
             headers=headers,
             json={
                 "track_name": "Kick",
@@ -76,9 +76,10 @@ class TestLoopEngineMessageFormat:
                 "base_params": {"sound": "bd", "n": 0}
             }
         )
+        track_id = response.json()["track_id"]
 
         client.post(
-            "/tracks/kick/patterns/main",
+            f"/tracks/{track_id}/patterns",
             headers=headers,
             json={
                 "pattern_name": "Main",
@@ -166,14 +167,15 @@ class TestPlaybackCommandIntegration:
         token = response.json()["token"]
         headers = {"X-Client-ID": "alice", "X-Client-Token": token}
 
-        client.post(
-            "/tracks/kick",
+        response = client.post(
+            "/tracks",
             headers=headers,
             json={"track_name": "Kick", "destination_id": "superdirt", "base_params": {"sound": "bd"}}
         )
+        track_id = response.json()["track_id"]
 
         client.post(
-            "/tracks/kick/patterns/main",
+            f"/tracks/{track_id}/patterns",
             headers=headers,
             json={
                 "pattern_name": "Main",
@@ -210,11 +212,12 @@ class TestPlaybackCommandIntegration:
         token = response.json()["token"]
         headers = {"X-Client-ID": "alice", "X-Client-Token": token}
 
-        client.post(
-            "/tracks/kick",
+        response = client.post(
+            "/tracks",
             headers=headers,
             json={"track_name": "Kick", "destination_id": "superdirt", "base_params": {"sound": "bd"}}
         )
+        track_id = response.json()["track_id"]
 
         # Sync empty track (version 0)
         sync_headers = {**headers, "X-Session-Version": "0"}
@@ -227,7 +230,7 @@ class TestPlaybackCommandIntegration:
 
         # Add pattern
         client.post(
-            "/tracks/kick/patterns/main",
+            f"/tracks/{track_id}/patterns",
             headers=headers,
             json={
                 "pattern_name": "Main",
@@ -254,11 +257,12 @@ class TestPlaybackCommandIntegration:
         token = response.json()["token"]
         headers = {"X-Client-ID": "alice", "X-Client-Token": token}
 
-        client.post(
-            "/tracks/kick",
+        response = client.post(
+            "/tracks",
             headers=headers,
             json={"track_name": "Kick", "destination_id": "superdirt", "base_params": {"sound": "bd"}}
         )
+        track_id = response.json()["track_id"]
 
         # Get initial version
         from oiduna_api.dependencies import get_container
@@ -297,11 +301,12 @@ class TestPlaybackCommandIntegration:
         bob_headers = {"X-Client-ID": "bob", "X-Client-Token": bob_token}
 
         # Setup track
-        client.post(
-            "/tracks/kick",
+        response = client.post(
+            "/tracks",
             headers=alice_headers,
             json={"track_name": "Kick", "destination_id": "superdirt", "base_params": {"sound": "bd"}}
         )
+        track_id = response.json()["track_id"]
 
         # Alice syncs first (version 0 -> 1)
         alice_sync_headers = {**alice_headers, "X-Session-Version": "0"}
@@ -347,11 +352,12 @@ class TestPlaybackCommandIntegration:
         d_headers = {"X-Client-ID": "client_d", "X-Client-Token": d_token}
 
         # Initial setup
-        client.post(
-            "/tracks/kick",
+        response = client.post(
+            "/tracks",
             headers=c_headers,
             json={"track_name": "Kick", "destination_id": "superdirt", "base_params": {"sound": "bd"}}
         )
+        track_id = response.json()["track_id"]
 
         # Both clients remember version 0
         initial_version = 0
@@ -385,14 +391,15 @@ class TestRealTimeUpdates:
         token = response.json()["token"]
         headers = {"X-Client-ID": "alice", "X-Client-Token": token}
 
-        client.post(
-            "/tracks/kick",
+        response = client.post(
+            "/tracks",
             headers=headers,
             json={"track_name": "Kick", "destination_id": "superdirt", "base_params": {"sound": "bd"}}
         )
+        track_id = response.json()["track_id"]
 
-        client.post(
-            "/tracks/kick/patterns/main",
+        response = client.post(
+            f"/tracks/{track_id}/patterns",
             headers=headers,
             json={
                 "pattern_name": "Main",
@@ -400,6 +407,7 @@ class TestRealTimeUpdates:
                 "events": [{"step": 0, "cycle": 0.0, "params": {}}]
             }
         )
+        pattern_id = response.json()["pattern_id"]
 
         # Compile with active pattern
         container = get_container()
@@ -408,7 +416,7 @@ class TestRealTimeUpdates:
 
         # Deactivate pattern
         response = client.patch(
-            "/tracks/kick/patterns/main",
+            f"/tracks/{track_id}/patterns/{pattern_id}",
             headers=headers,
             json={"active": False}
         )
@@ -420,7 +428,7 @@ class TestRealTimeUpdates:
 
         # Reactivate
         client.patch(
-            "/tracks/kick/patterns/main",
+            f"/tracks/{track_id}/patterns/{pattern_id}",
             headers=headers,
             json={"active": True}
         )
@@ -436,8 +444,8 @@ class TestRealTimeUpdates:
         token = response.json()["token"]
         headers = {"X-Client-ID": "alice", "X-Client-Token": token}
 
-        client.post(
-            "/tracks/kick",
+        response = client.post(
+            "/tracks",
             headers=headers,
             json={
                 "track_name": "Kick",
@@ -445,9 +453,10 @@ class TestRealTimeUpdates:
                 "base_params": {"sound": "bd", "gain": 0.5}
             }
         )
+        track_id = response.json()["track_id"]
 
         client.post(
-            "/tracks/kick/patterns/main",
+            f"/tracks/{track_id}/patterns",
             headers=headers,
             json={
                 "pattern_name": "Main",
@@ -463,7 +472,7 @@ class TestRealTimeUpdates:
 
         # Update base_params
         client.patch(
-            "/tracks/kick",
+            f"/tracks/{track_id}",
             headers=headers,
             json={"base_params": {"gain": 0.9}}
         )
@@ -479,14 +488,15 @@ class TestRealTimeUpdates:
         token = response.json()["token"]
         headers = {"X-Client-ID": "alice", "X-Client-Token": token}
 
-        client.post(
-            "/tracks/kick",
+        response = client.post(
+            "/tracks",
             headers=headers,
             json={"track_name": "Kick", "destination_id": "superdirt", "base_params": {"sound": "bd"}}
         )
+        track_id = response.json()["track_id"]
 
         client.post(
-            "/tracks/kick/patterns/main",
+            f"/tracks/{track_id}/patterns",
             headers=headers,
             json={
                 "pattern_name": "Main",
@@ -535,8 +545,8 @@ class TestDestinationRouting:
         headers = {"X-Client-ID": "alice", "X-Client-Token": token}
 
         # Create OSC track
-        client.post(
-            "/tracks/kick_osc",
+        response = client.post(
+            "/tracks",
             headers=headers,
             json={
                 "track_name": "Kick OSC",
@@ -544,10 +554,11 @@ class TestDestinationRouting:
                 "base_params": {"sound": "bd"}
             }
         )
+        kick_track_id = response.json()["track_id"]
 
         # Create MIDI track
-        client.post(
-            "/tracks/synth_midi",
+        response = client.post(
+            "/tracks",
             headers=headers,
             json={
                 "track_name": "Synth MIDI",
@@ -555,10 +566,11 @@ class TestDestinationRouting:
                 "base_params": {"note": 60}
             }
         )
+        synth_track_id = response.json()["track_id"]
 
         # Add patterns
         client.post(
-            "/tracks/kick_osc/patterns/main",
+            f"/tracks/{kick_track_id}/patterns",
             headers=headers,
             json={
                 "pattern_name": "Main",
@@ -568,7 +580,7 @@ class TestDestinationRouting:
         )
 
         client.post(
-            "/tracks/synth_midi/patterns/main",
+            f"/tracks/{synth_track_id}/patterns",
             headers=headers,
             json={
                 "pattern_name": "Main",

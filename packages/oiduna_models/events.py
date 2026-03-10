@@ -1,22 +1,26 @@
 """
-Event model for scheduled musical events within patterns.
+PatternEvent model for scheduled musical events within patterns.
 
-An Event represents a single musical event at a specific timing position.
-Events are immutable once created.
+A PatternEvent represents a single musical event at a specific timing position.
+PatternEvents are immutable once created.
+
+Note: Previously named "Event" - renamed to PatternEvent in v3.1 to distinguish
+from SessionEvent (CRUD operations) and SSE Event (HTTP streaming).
 """
 
 from typing import Any
 from pydantic import BaseModel, Field
 
 
-class Event(BaseModel):
+class PatternEvent(BaseModel):
     """
-    A single scheduled event within a pattern.
+    A single scheduled musical event within a pattern.
 
-    Events are combined with Track.base_params to generate ScheduledMessages.
+    PatternEvents are combined with Track.base_params to generate ScheduledMessages.
+    They define precise timing (step, cycle) and sound parameters.
 
     Example:
-        >>> event = Event(
+        >>> event = PatternEvent(
         ...     step=0,
         ...     cycle=0.0,
         ...     params={"gain": 0.8, "pan": 0.5}

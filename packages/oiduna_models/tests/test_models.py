@@ -8,7 +8,7 @@ from oiduna_models import (
     Session,
     Track,
     Pattern,
-    Event,
+    PatternEvent,
     ClientInfo,
     Environment,
     IDGenerator,
@@ -16,12 +16,12 @@ from oiduna_models import (
 from oiduna_models import OscDestinationConfig
 
 
-class TestEvent:
-    """Test Event model."""
+class TestPatternEvent:
+    """Test PatternEvent model."""
 
     def test_create_event(self):
         """Test creating a valid event."""
-        event = Event(
+        event = PatternEvent(
             step=0,
             cycle=0.0,
             params={"gain": 0.8}
@@ -33,15 +33,15 @@ class TestEvent:
     def test_event_step_validation(self):
         """Test step must be 0-255."""
         with pytest.raises(ValidationError, match="step"):
-            Event(step=-1, cycle=0.0, params={})
+            PatternEvent(step=-1, cycle=0.0, params={})
 
         with pytest.raises(ValidationError, match="step"):
-            Event(step=256, cycle=0.0, params={})
+            PatternEvent(step=256, cycle=0.0, params={})
 
     def test_event_cycle_validation(self):
         """Test cycle must be >= 0."""
         with pytest.raises(ValidationError, match="cycle"):
-            Event(step=0, cycle=-1.0, params={})
+            PatternEvent(step=0, cycle=-1.0, params={})
 
 
 class TestPattern:
@@ -50,29 +50,34 @@ class TestPattern:
     def test_create_pattern(self):
         """Test creating a valid pattern."""
         pattern = Pattern(
-            pattern_id="pattern_001",
+            pattern_id="3e2b",
+            track_id="0a1f",
             pattern_name="main",
             client_id="client_001",
             active=True,
             events=[
-                Event(step=0, cycle=0.0, params={}),
-                Event(step=64, cycle=1.0, params={"gain": 0.9}),
+                PatternEvent(step=0, cycle=0.0, params={}),
+                PatternEvent(step=64, cycle=1.0, params={"gain": 0.9}),
             ]
         )
-        assert pattern.pattern_id == "pattern_001"
+        assert pattern.pattern_id == "3e2b"
+        assert pattern.track_id == "0a1f"
         assert pattern.pattern_name == "main"
         assert pattern.client_id == "client_001"
         assert pattern.active is True
+        assert pattern.archived is False
         assert len(pattern.events) == 2
 
     def test_pattern_default_values(self):
         """Test pattern defaults."""
         pattern = Pattern(
-            pattern_id="pattern_001",
+            pattern_id="3e2b",
+            track_id="0a1f",
             pattern_name="main",
             client_id="client_001"
         )
         assert pattern.active is True
+        assert pattern.archived is False
         assert pattern.events == []
 
 
@@ -82,13 +87,13 @@ class TestTrack:
     def test_create_track(self):
         """Test creating a valid track."""
         track = Track(
-            track_id="track_001",
+            track_id="0a1f",
             track_name="kick",
             destination_id="superdirt",
             client_id="client_001",
             base_params={"sound": "bd", "orbit": 0},
         )
-        assert track.track_id == "track_001"
+        assert track.track_id == "0a1f"
         assert track.track_name == "kick"
         assert track.destination_id == "superdirt"
         assert track.client_id == "client_001"
@@ -97,7 +102,7 @@ class TestTrack:
     def test_track_default_values(self):
         """Test track defaults."""
         track = Track(
-            track_id="track_001",
+            track_id="0a1f",
             track_name="kick",
             destination_id="superdirt",
             client_id="client_001",
@@ -114,7 +119,7 @@ class TestTrack:
     def test_valid_destination_id_formats(self, destination_id, description):
         """Test various valid destination ID formats."""
         track = Track(
-            track_id="t1",
+            track_id="0a1f",
             track_name="test",
             destination_id=destination_id,
             client_id="c1"
@@ -125,7 +130,7 @@ class TestTrack:
         """Test destination_id with space raises ValueError."""
         with pytest.raises(ValueError, match="alphanumeric"):
             Track(
-                track_id="t1",
+                track_id="0a1f",
                 track_name="kick",
                 destination_id="super dirt",
                 client_id="c1"
@@ -135,7 +140,7 @@ class TestTrack:
         """Test destination_id with special character raises ValueError."""
         with pytest.raises(ValueError, match="alphanumeric"):
             Track(
-                track_id="t1",
+                track_id="0a1f",
                 track_name="kick",
                 destination_id="dest!",
                 client_id="c1"
@@ -145,7 +150,7 @@ class TestTrack:
         """Test error message includes helpful examples."""
         with pytest.raises(ValueError, match="superdirt.*midi_1.*osc-synth"):
             Track(
-                track_id="t1",
+                track_id="0a1f",
                 track_name="kick",
                 destination_id="invalid dest!",
                 client_id="c1"
@@ -233,7 +238,7 @@ class TestSession:
             token=ClientInfo.generate_token(),
         )
         track = Track(
-            track_id="track_001",
+            track_id="0a1f",
             track_name="kick",
             destination_id="superdirt",
             client_id="client_001",
@@ -242,7 +247,7 @@ class TestSession:
         session = Session(
             destinations={"superdirt": dest},
             clients={"client_001": client},
-            tracks={"track_001": track},
+            tracks={"0a1f": track},
         )
 
         assert len(session.destinations) == 1
@@ -253,24 +258,36 @@ class TestSession:
 class TestIDGenerator:
     """Test IDGenerator."""
 
-    def test_track_id_generation(self):
-        """Test track ID generation."""
+    def test_track_id_format(self):
+        """Test track ID is 4-digit hexadecimal."""
         gen = IDGenerator()
-        assert gen.next_track_id() == "track_001"
-        assert gen.next_track_id() == "track_002"
-        assert gen.next_track_id() == "track_003"
+        track_id = gen.generate_track_id()
+        assert len(track_id) == 4
+        assert all(c in "0123456789abcdef" for c in track_id)
 
-    def test_pattern_id_generation(self):
-        """Test pattern ID generation."""
+    def test_pattern_id_format(self):
+        """Test pattern ID is 4-digit hexadecimal."""
         gen = IDGenerator()
-        assert gen.next_pattern_id() == "pattern_001"
-        assert gen.next_pattern_id() == "pattern_002"
+        pattern_id = gen.generate_pattern_id()
+        assert len(pattern_id) == 4
+        assert all(c in "0123456789abcdef" for c in pattern_id)
+
+    def test_uniqueness(self):
+        """Test generated IDs are unique within a session."""
+        gen = IDGenerator()
+        track_ids = [gen.generate_track_id() for _ in range(1000)]
+        assert len(set(track_ids)) == 1000  # All unique
+
+        pattern_ids = [gen.generate_pattern_id() for _ in range(1000)]
+        assert len(set(pattern_ids)) == 1000
 
     def test_reset(self):
-        """Test ID generator reset."""
+        """Test ID generator reset clears all pools."""
         gen = IDGenerator()
-        gen.next_track_id()
-        gen.next_pattern_id()
+        gen.generate_track_id()
+        gen.generate_pattern_id()
+
         gen.reset()
-        assert gen.next_track_id() == "track_001"
-        assert gen.next_pattern_id() == "pattern_001"
+
+        assert len(gen._track_ids) == 0
+        assert len(gen._pattern_ids) == 0
