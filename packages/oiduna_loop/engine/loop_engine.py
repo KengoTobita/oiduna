@@ -60,6 +60,7 @@ try:
     from oiduna_scheduler.senders import OscDestinationSender, MidiDestinationSender
     from oiduna_models import OscDestinationConfig, MidiDestinationConfig
     from oiduna_models import load_destinations_from_file
+    from oiduna_timeline import ScheduledChangeTimeline
 except ImportError:
     # Fallback for local development
     from oiduna_scheduler.scheduler_models import ScheduledMessageBatch, ScheduledMessage
@@ -68,6 +69,7 @@ except ImportError:
     from oiduna_scheduler.senders import OscDestinationSender, MidiDestinationSender
     from oiduna_models import OscDestinationConfig, MidiDestinationConfig
     from oiduna_models import load_destinations_from_file
+    from oiduna_timeline import ScheduledChangeTimeline
 
 logger = logging.getLogger(__name__)
 
@@ -166,6 +168,10 @@ class LoopEngine:
             "midi": False,
             "osc": False,
         }
+
+        # Timeline scheduling (cumulative step counter, persists across stop/start)
+        self._global_step: int = 0
+        self._timeline: ScheduledChangeTimeline | None = None
 
         # New destination-based architecture (Milestone 3)
         self._message_scheduler = MessageScheduler()
@@ -317,6 +323,8 @@ class LoopEngine:
             # Reset drift correction anchor (engine-specific)
             self._step_anchor_time = None
             self._step_count = 0
+            # NOTE: _global_step is NOT reset - it's a cumulative counter
+            # that persists across stop/start for timeline scheduling
 
             # Send status update (non-blocking)
             self._schedule_status_update()
@@ -544,6 +552,32 @@ class LoopEngine:
             CommandResult indicating success or failure
         """
         return self._handle_midi_panic({})
+
+    def set_timeline(self, timeline: ScheduledChangeTimeline) -> None:
+        """
+        Public API: Set the timeline for scheduled changes.
+
+        Args:
+            timeline: The ScheduledChangeTimeline instance to use for pattern changes.
+
+        Example:
+            >>> from oiduna_timeline import ScheduledChangeTimeline
+            >>> timeline = ScheduledChangeTimeline()
+            >>> engine.set_timeline(timeline)
+        """
+        self._timeline = timeline
+
+    def get_global_step(self) -> int:
+        """
+        Public API: Get the current global step counter.
+
+        The global step is a cumulative counter that persists across
+        stop/start cycles, used for timeline scheduling.
+
+        Returns:
+            Current global step (0-based, starts at 0 on engine creation).
+        """
+        return self._global_step
 
     async def _check_connections(self) -> None:
         """
@@ -780,6 +814,15 @@ class LoopEngine:
         try:
             current_step = self.state.position.step
 
+            # Apply timeline changes (if any scheduled for this global step)
+            if self._timeline:
+                from oiduna_loop.engine.timeline_loader import TimelineLoader
+                TimelineLoader.apply_changes_at_step(
+                    self._global_step,
+                    self._timeline,
+                    self._message_scheduler,
+                )
+
             # Get and filter messages
             messages = self._get_filtered_messages(current_step)
 
@@ -804,6 +847,7 @@ class LoopEngine:
         """
         # Advance step count and position
         self._step_count += 1
+        self._global_step += 1  # Global step also increments (cumulative counter)
         self.state.advance_step()
 
         # Drift-corrected wait: calculate expected time for next step

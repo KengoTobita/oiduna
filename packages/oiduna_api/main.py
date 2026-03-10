@@ -15,7 +15,7 @@ from fastapi.templating import Jinja2Templates
 from oiduna_api.config import settings
 from oiduna_api.dependencies import get_container
 from oiduna_api.extensions import discover_extensions
-from oiduna_api.routes import assets, dashboard, midi, playback, stream, auth, session, tracks, patterns, admin
+from oiduna_api.routes import assets, dashboard, midi, playback, stream, auth, session, tracks, patterns, admin, timeline
 from oiduna_api.services.loop_service import LoopService, get_loop_service, lifespan
 from oiduna_models import load_destinations_from_file
 
@@ -71,6 +71,10 @@ async def lifespan_wrapper(app: FastAPI):
             logger.error(f"Failed to load destinations: {e}")
             # Don't fail startup - destinations can be added via admin API
 
+        # 5a. Connect timeline to LoopEngine
+        loop_service = get_loop_service()
+        loop_service.connect_timeline(container)
+
         # 6. Register extension routers (must be before app starts accepting requests)
         for name, ext in pipeline.extensions:
             router = ext.get_router()
@@ -117,6 +121,7 @@ app.include_router(admin.router, tags=["admin"])
 
 # Existing routers
 app.include_router(playback.router, prefix="/playback", tags=["playback"])
+app.include_router(timeline.router, prefix="/playback", tags=["timeline"])
 app.include_router(stream.router, tags=["stream"])
 app.include_router(midi.router, prefix="/midi", tags=["midi"])
 app.include_router(assets.router, prefix="/assets", tags=["assets"])

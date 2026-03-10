@@ -94,7 +94,28 @@ class ScheduledMessageBatch:
     messages: tuple[ScheduledMessage, ...]  # All messages for session
     bpm: float = 120.0  # Tempo
     pattern_length: float = 4.0  # Pattern length in cycles
-    destinations: frozenset[str] = field(default_factory=frozenset)  # Destination IDs referenced
+    # destinations removed as field - now a cached property
+
+    @property
+    def destinations(self) -> frozenset[str]:
+        """
+        Auto-infer destination IDs from messages (cached).
+
+        This optimization eliminates redundant storage - destinations
+        are always derivable from the messages themselves.
+
+        Returns:
+            Frozenset of destination IDs referenced in messages.
+        """
+        # Cache the result to avoid recomputation
+        if not hasattr(self, '_cached_destinations'):
+            # Use object.__setattr__ to bypass frozen dataclass restriction
+            object.__setattr__(
+                self,
+                '_cached_destinations',
+                frozenset(msg.destination_id for msg in self.messages)
+            )
+        return self._cached_destinations
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary (for JSON serialization)."""
@@ -110,14 +131,9 @@ class ScheduledMessageBatch:
         """Create from dictionary (for JSON deserialization)."""
         messages = [ScheduledMessage.from_dict(msg) for msg in data["messages"]]
 
-        # Backward compatibility: infer destinations from messages if not present
-        destinations = data.get("destinations")
-        if destinations is None:
-            destinations = {msg.destination_id for msg in messages}
-
+        # destinations is now a property, so we don't pass it to constructor
         return cls(
             messages=tuple(messages),
             bpm=data.get("bpm", 120.0),
             pattern_length=data.get("pattern_length", 4.0),
-            destinations=frozenset(destinations),
         )

@@ -79,6 +79,22 @@ class LoopService:
             raise RuntimeError("Engine not initialized. Call initialize() first.")
         return self._state_sink
 
+    def connect_timeline(self, container) -> None:
+        """
+        Connect the SessionContainer's timeline to the LoopEngine.
+
+        This should be called during app startup after the container is initialized.
+
+        Args:
+            container: SessionContainer with timeline manager
+        """
+        if self._engine is None:
+            raise RuntimeError("Engine not initialized. Call initialize() first.")
+
+        # Set the timeline from the container
+        self._engine.set_timeline(container.timeline.timeline)
+        logger.info("Timeline connected to LoopEngine")
+
 
 def get_loop_service() -> LoopService:
     """

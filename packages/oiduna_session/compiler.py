@@ -89,7 +89,6 @@ class SessionCompiler:
             10
         """
         messages = []
-        destinations = set()
         invalid_destinations: list[dict[str, str]] = []
 
         for track in session.tracks.values():
@@ -100,12 +99,9 @@ class SessionCompiler:
                     "destination_id": track.destination_id
                 })
 
-            # Collect destination ID
-            destinations.add(track.destination_id)
-
             for pattern in track.patterns.values():
-                # Skip inactive patterns
-                if not pattern.active:
+                # Skip inactive or archived patterns
+                if not pattern.active or pattern.archived:
                     continue
 
                 # Generate messages for each event
@@ -129,7 +125,7 @@ class SessionCompiler:
             messages=tuple(messages),
             bpm=session.environment.bpm,
             pattern_length=4.0,  # Fixed (not used by 256-step engine)
-            destinations=frozenset(destinations),
+            # destinations auto-inferred from messages (property)
         )
 
     @staticmethod
@@ -151,7 +147,8 @@ class SessionCompiler:
         messages = []
 
         for pattern in track.patterns.values():
-            if not pattern.active:
+            # Skip inactive or archived patterns
+            if not pattern.active or pattern.archived:
                 continue
 
             for event in pattern.events:
