@@ -25,8 +25,8 @@ class TestSessionDestinationValidation:
         engine = LoopEngine(
             osc=mock_osc,
             midi=mock_midi,
-            commands=mock_commands,
-            publisher=mock_publisher,
+            command_consumer=mock_commands,
+            state_producer=mock_publisher,
         )
         engine._register_handlers()
         return engine

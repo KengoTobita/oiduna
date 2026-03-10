@@ -23,7 +23,7 @@ from ..commands import (
     SoloCommand,
     StopCommand,
 )
-from ..protocols import StateSink
+from ..protocols import StateProducer
 from ..result import CommandResult
 from ..state import PlaybackState, RuntimeState
 from .clock_generator import ClockGenerator
@@ -47,7 +47,7 @@ class CommandHandler:
     - RuntimeState: playback state, BPM, mute/solo
     - ClockGenerator: MIDI clock messages
     - NoteScheduler: note-off cleanup
-    - StateSink: status/tracks updates
+    - StateProducer: status/tracks updates
     """
 
     def __init__(
@@ -55,7 +55,7 @@ class CommandHandler:
         state: RuntimeState,
         clock_generator: ClockGenerator,
         note_scheduler: NoteScheduler,
-        publisher: StateSink,
+        publisher: StateProducer,
         midi_enabled: bool = False,
     ):
         """

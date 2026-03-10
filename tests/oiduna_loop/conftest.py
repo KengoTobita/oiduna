@@ -58,8 +58,8 @@ def test_engine(
     engine = LoopEngine(
         osc=mock_osc,
         midi=mock_midi,
-        commands=mock_commands,
-        publisher=mock_publisher,
+        command_consumer=mock_commands,
+        state_producer=mock_publisher,
     )
     # Register handlers as start() would do
     engine._register_handlers()

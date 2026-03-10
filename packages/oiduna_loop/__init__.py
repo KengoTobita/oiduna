@@ -8,13 +8,13 @@ __version__ = "0.2.0"
 
 from .engine import LoopEngine
 from .factory import create_loop_engine
-from .protocols import CommandSource, MidiOutput, OscOutput, StateSink
+from .protocols import CommandConsumer, MidiOutput, OscOutput, StateProducer
 
 __all__ = [
     "create_loop_engine",
     "LoopEngine",
     "MidiOutput",
     "OscOutput",
-    "CommandSource",
-    "StateSink",
+    "CommandConsumer",
+    "StateProducer",
 ]

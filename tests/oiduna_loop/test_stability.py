@@ -48,8 +48,8 @@ class StabilityTestEngine:
         self.engine = LoopEngine(
             osc=osc,
             midi=midi,
-            commands=commands,
-            publisher=publisher,
+            command_consumer=commands,
+            state_producer=publisher,
         )
         self.engine._register_handlers()
         self.step_times: list[float] = []
