@@ -1,10 +1,19 @@
 # IPC Naming Migration Guide
 
+**⚠️ v3.0 重要**: 旧命名（CommandSink/Source, StateSink/Source）は **完全削除されました**（2026-03-11）。
+すべてのコードでProducer/Consumer命名を使用してください。詳細は [ADR-0021](knowledge/adr/0021-backward-compatibility-removal.md) を参照。
+
+---
+
 ## 概要
 
 oiduna v2.1以降、IPCプロトコルの命名を**Producer/Consumerパターン**に移行しました。
 
 この変更により、データの流れる方向と命名が直感的に一致し、コードの可読性が向上します。
+
+**移行タイムライン**:
+- **v2.1**: Producer/Consumer導入、旧名はaliasとして残存
+- **v3.0**: 旧名を完全削除（ADR-0021）
 
 ## 変更の背景
 
@@ -93,14 +102,21 @@ def __init__(
     self._state_producer = state_producer
 ```
 
-### 段階2: 旧Protocolも互換性維持
+### 段階2: 旧Protocolの削除（v3.0で完了）
 
-既存の`CommandSource`, `StateSink`も引き続き使用可能です：
+**⚠️ 重要**: 旧Protocol名は **v3.0（2026-03-11）で完全削除されました**。
 
 ```python
-# 互換性のため、両方の型を受け入れる
-command_consumer: CommandConsumer | CommandSource
-state_producer: StateProducer | StateSink
+# ❌ 動作しなくなったコード（v3.0以降）
+from oiduna_loop.ipc.protocols import CommandSource
+# ImportError: cannot import name 'CommandSource'
+
+# ❌ Union型も削除
+command_consumer: CommandConsumer | CommandSource  # エラー
+
+# ✅ 正しいコード
+from oiduna_loop.ipc.protocols import CommandConsumer
+command_consumer: CommandConsumer
 ```
 
 ### 段階3: Factoryでの使用
@@ -197,9 +213,9 @@ def test_engine(
 
 | バージョン | 状態 | 詳細 |
 |-----------|------|------|
-| **v2.1** (現在) | 新Protocolを追加 | CommandProducer, CommandConsumer, StateProducer, StateConsumer追加 |
+| **v2.1** | 新Protocolを追加 | CommandProducer, CommandConsumer, StateProducer, StateConsumer追加 |
 | **v2.2** | 旧Protocol警告 | CommandSink, CommandSource, StateSink, StateSourceにdeprecation警告 |
-| **v3.0** | 旧Protocol削除 | 旧Protocolを完全削除 |
+| **v3.0** (現在) | 旧Protocol削除 | 旧Protocolを完全削除（2026-03-11） |
 
 ---
 
@@ -207,7 +223,8 @@ def test_engine(
 
 ### Q1: 既存のコードは動作し続けますか？
 
-**A**: はい。旧パラメータ名（`commands`, `publisher`）も互換性のため引き続きサポートされます。
+**A**: **いいえ（v3.0以降）**。旧Protocol名（CommandSink/Source, StateSink/Source）は完全削除されました。
+すべてのコードで新しいProducer/Consumer命名を使用する必要があります。
 
 ```python
 # 旧コード（v2.1でも動作）

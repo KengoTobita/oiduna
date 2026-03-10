@@ -114,14 +114,22 @@ class BaseManager:
         self.event_sink = event_sink
 ```
 
-### 段階2: 旧Protocolも互換性維持
+### 段階2: 旧Protocolの削除（v3.0で完了）
 
-既存の`EventSink`も引き続き使用可能です：
+**⚠️ 重要**: `EventSink` aliasは **v3.0（2026-03-11）で完全削除されました**。
 
 ```python
-# base.py で定義されているエイリアス
-EventSink = SessionEventSink  # Legacy alias
+# ❌ 動作しなくなったコード（v3.0以降）
+from oiduna_session.managers import EventSink
+# ImportError: cannot import name 'EventSink'
+
+# ✅ 正しいコード
+from oiduna_session.managers import SessionEventSink
 ```
+
+**移行タイムライン**:
+- **v2.1**: `SessionEventSink` 導入、`EventSink` は alias として残存
+- **v3.0**: `EventSink` alias を完全削除（ADR-0021）
 
 ### 段階3: SessionContainerでの使用
 

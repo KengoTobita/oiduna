@@ -185,15 +185,25 @@ elif resp.ok:
     print(f"Synced! New version: {data['version']}")
 ```
 
-## 後方互換性
+## バージョン要件
 
-`X-Session-Version`ヘッダーが**省略された場合**は`0`として扱われます:
+**⚠️ v3.0以降**: `X-Session-Version`ヘッダーは**必須**です。
+
+省略した場合、`400 Bad Request`エラーが返されます:
 
 ```python
-client_version = x_session_version if x_session_version is not None else 0
+if x_session_version is None:
+    raise HTTPException(
+        status_code=400,
+        detail="X-Session-Version header is required"
+    )
 ```
 
-これにより、古いクライアントも動作し続けます（ただし競合検出なし）。
+**変更履歴**:
+- **v2.x**: ヘッダー省略時は`0`として扱う（後方互換性）
+- **v3.0**: ヘッダー必須化（ADR-0021）
+
+**移行方法**: すべてのクライアントで`X-Session-Version`ヘッダーを送信してください。
 
 ## エンドポイント一覧
 

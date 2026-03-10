@@ -70,12 +70,12 @@ class LoopEngine:
 
     async def start(self) -> None:
         """ループ開始"""
-        self.state.playing = True
+        self.state.playback_state = PlaybackState.PLAYING
         await self.clock.start(self._on_step)
 
     async def stop(self) -> None:
         """ループ停止"""
-        self.state.playing = False
+        self.state.playback_state = PlaybackState.STOPPED
         await self.clock.stop()
 
     async def sync(self, scheduler: MessageScheduler) -> None:
