@@ -104,14 +104,6 @@ class RuntimeState:
         """Check if actively playing"""
         return self.playback_state == PlaybackState.PLAYING
 
-    @playing.setter
-    def playing(self, value: bool) -> None:
-        """Backwards compatible setter"""
-        if value:
-            self.playback_state = PlaybackState.PLAYING
-        elif self.playback_state == PlaybackState.PLAYING:
-            self.playback_state = PlaybackState.PAUSED
-
     @property
     def bpm(self) -> float:
         """Get current BPM"""
@@ -263,24 +255,3 @@ class RuntimeState:
             "soloed_tracks": sorted(tid for tid, s in self._track_solo.items() if s),
         }
 
-    # ============================================================
-    # Backwards Compatibility (Minimal)
-    # ============================================================
-
-    @property
-    def tracks(self) -> dict[str, Any]:
-        """
-        Get all tracks (for backward compatibility).
-
-        Returns empty dict - no longer supported in new architecture.
-        """
-        return {}
-
-    @property
-    def sequences(self) -> dict[str, Any]:
-        """
-        Get all sequences (for backward compatibility).
-
-        Returns empty dict - no longer supported in new architecture.
-        """
-        return {}

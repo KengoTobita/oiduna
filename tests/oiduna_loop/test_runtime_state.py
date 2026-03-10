@@ -85,12 +85,13 @@ class TestRuntimeStateBasics:
         state = RuntimeState()
         assert not state.playing
 
-        state.playing = True
+        state.playback_state = PlaybackState.PLAYING
         assert state.playback_state == PlaybackState.PLAYING
         assert state.playing
 
-        state.playing = False
+        state.playback_state = PlaybackState.PAUSED
         assert state.playback_state == PlaybackState.PAUSED
+        assert not state.playing
 
     def test_set_bpm(self) -> None:
         """Test BPM setting."""

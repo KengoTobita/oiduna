@@ -4,7 +4,7 @@ from typing import Optional
 from oiduna_models import Session
 from oiduna_models import DestinationConfig
 from oiduna_session.validator import SessionValidator
-from .base import BaseManager, EventSink
+from .base import BaseManager, SessionEventSink
 
 
 class DestinationManager(BaseManager):
@@ -17,7 +17,7 @@ class DestinationManager(BaseManager):
     def __init__(
         self,
         session: Session,
-        event_sink: Optional[EventSink] = None,
+        event_sink: Optional[SessionEventSink] = None,
     ) -> None:
         """
         Initialize the DestinationManager.

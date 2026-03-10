@@ -19,7 +19,7 @@ class SessionEventSink(Protocol):
     Example events:
         - client_connected, client_disconnected
         - track_created, track_updated, track_deleted
-        - pattern_created, pattern_updated, pattern_deleted
+        - pattern_created, pattern_updated, pattern_archived
         - environment_updated
     """
 
@@ -32,10 +32,6 @@ class SessionEventSink(Protocol):
                 Example: {"type": "track_created", "data": {...}}
         """
         ...
-
-
-# Legacy alias for backward compatibility (DEPRECATED as of v2.1)
-EventSink = SessionEventSink
 
 
 class BaseManager:
@@ -57,7 +53,7 @@ class BaseManager:
         Args:
             session: The session object to manage
             event_sink: Optional session event sink for emitting CRUD events.
-                Accepts SessionEventSink (new) or EventSink (legacy).
+                Accepts SessionEventSink protocol.
         """
         self.session = session
         self.event_sink = event_sink

@@ -2,7 +2,7 @@
 
 from typing import Optional
 from oiduna_models import Session
-from .managers.base import SessionEventSink, EventSink  # EventSink is legacy alias
+from .managers.base import SessionEventSink
 from .managers.client_manager import ClientManager
 from .managers.destination_manager import DestinationManager
 from .managers.environment_manager import EnvironmentManager

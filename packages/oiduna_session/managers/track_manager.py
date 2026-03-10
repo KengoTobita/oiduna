@@ -1,8 +1,8 @@
 """Track manager for session track management."""
 
 from typing import Any, Optional
-from oiduna_models import Session, Track
-from .base import BaseManager, EventSink
+from oiduna_models import Session, Track, IDGenerator
+from .base import BaseManager, SessionEventSink
 from .client_manager import ClientManager
 from .destination_manager import DestinationManager
 
@@ -18,7 +18,8 @@ class TrackManager(BaseManager):
     def __init__(
         self,
         session: Session,
-        event_sink: Optional[EventSink] = None,
+        event_sink: Optional[SessionEventSink] = None,
+        id_generator: Optional[IDGenerator] = None,
         destination_manager: Optional[DestinationManager] = None,
         client_manager: Optional[ClientManager] = None,
     ) -> None:
@@ -28,50 +29,60 @@ class TrackManager(BaseManager):
         Args:
             session: The session object to manage
             event_sink: Optional event sink for emitting state changes
+            id_generator: Optional IDGenerator for creating unique track IDs
             destination_manager: Optional DestinationManager for validation
             client_manager: Optional ClientManager for validation
         """
         super().__init__(session, event_sink)
+        self.id_generator = id_generator or IDGenerator()
         self.destination_manager = destination_manager
         self.client_manager = client_manager
 
     def create(
         self,
-        track_id: str,
         track_name: str,
         destination_id: str,
         client_id: str,
         base_params: Optional[dict[str, Any]] = None,
     ) -> Track:
         """
-        Create a new track.
+        Create a new track with server-generated ID.
 
         Args:
-            track_id: Unique track identifier
             track_name: Human-readable name
             destination_id: Target destination (must exist)
             client_id: Owner client ID (must exist)
             base_params: Base parameters for all events
 
         Returns:
-            Created Track
+            Created Track with server-generated track_id
 
         Raises:
             ValueError: If validation fails
         """
-        # Validate destination exists
+        self._validate_track_creation(destination_id, client_id)
+        track = self._build_track(track_name, destination_id, client_id, base_params)
+        self._register_track(track)
+        self._emit_track_created_event(track)
+        return track
+
+    def _validate_track_creation(self, destination_id: str, client_id: str) -> None:
+        """Validate that destination and client exist."""
         if destination_id not in self.session.destinations:
             raise ValueError(f"Destination {destination_id} does not exist")
-
-        # Validate client exists
         if client_id not in self.session.clients:
             raise ValueError(f"Client {client_id} does not exist")
 
-        # Validate track_id unique
-        if track_id in self.session.tracks:
-            raise ValueError(f"Track {track_id} already exists")
-
-        track = Track(
+    def _build_track(
+        self,
+        track_name: str,
+        destination_id: str,
+        client_id: str,
+        base_params: Optional[dict[str, Any]],
+    ) -> Track:
+        """Build a new Track object with generated ID."""
+        track_id = self.id_generator.generate_track_id()
+        return Track(
             track_id=track_id,
             track_name=track_name,
             destination_id=destination_id,
@@ -80,17 +91,18 @@ class TrackManager(BaseManager):
             patterns={},
         )
 
-        self.session.tracks[track_id] = track
+    def _register_track(self, track: Track) -> None:
+        """Register track in session."""
+        self.session.tracks[track.track_id] = track
 
-        # Emit event
+    def _emit_track_created_event(self, track: Track) -> None:
+        """Emit track_created event."""
         self._emit_event("track_created", {
-            "track_id": track_id,
-            "track_name": track_name,
-            "client_id": client_id,
-            "destination_id": destination_id,
+            "track_id": track.track_id,
+            "track_name": track.track_name,
+            "client_id": track.client_id,
+            "destination_id": track.destination_id,
         })
-
-        return track
 
     def get(self, track_id: str) -> Optional[Track]:
         """
@@ -147,6 +159,9 @@ class TrackManager(BaseManager):
         """
         Delete a track (including all its patterns).
 
+        Cascade deletes all patterns in the track.
+        Session-scoped IDs are automatically released when session ends.
+
         Args:
             track_id: ID of the track to delete
 
@@ -155,12 +170,16 @@ class TrackManager(BaseManager):
         """
         if track_id in self.session.tracks:
             track = self.session.tracks[track_id]
+            pattern_count = len(track.patterns)
+
+            # Cascade delete (patterns are removed with track)
             del self.session.tracks[track_id]
 
             # Emit event
             self._emit_event("track_deleted", {
                 "track_id": track_id,
                 "client_id": track.client_id,
+                "patterns_deleted": pattern_count,
             })
 
             return True

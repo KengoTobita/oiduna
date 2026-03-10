@@ -23,19 +23,6 @@ class LoopService:
         self._engine: LoopEngine | None = None
         self._state_sink: InProcessStateSink | None = None
 
-    @classmethod
-    def get_instance(cls) -> "LoopService":
-        """
-        Get the singleton LoopService instance.
-
-        DEPRECATED: Use get_loop_service() dependency instead.
-        This method is kept for backward compatibility.
-        """
-        global _loop_service
-        if _loop_service is None:
-            _loop_service = cls()
-        return _loop_service
-
     def initialize(
         self,
         osc_host: str = "127.0.0.1",

@@ -247,8 +247,12 @@ async def sync_session_to_engine(
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     # Version check (optimistic locking)
-    # If no version header provided, treat as 0 for backwards compatibility
-    client_version = x_session_version if x_session_version is not None else 0
+    if x_session_version is None:
+        raise HTTPException(
+            status_code=400,
+            detail="X-Session-Version header is required"
+        )
+    client_version = x_session_version
     current_version = container.session.version
     if current_version != client_version:
         conflict_detail = {

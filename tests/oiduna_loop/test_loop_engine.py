@@ -83,7 +83,7 @@ class TestLoopEngineCommands:
     def test_handle_play_when_already_playing(self, test_engine: LoopEngine, mock_midi):
         """Play command when already playing should do nothing."""
         test_engine._midi_enabled = True
-        test_engine.state.playing = True
+        test_engine.state.playback_state = PlaybackState.PLAYING
 
         test_engine.handle_play({})
 
@@ -93,7 +93,7 @@ class TestLoopEngineCommands:
     def test_handle_stop(self, test_engine: LoopEngine, mock_midi):
         """Stop command should stop playback and send MIDI stop."""
         test_engine._midi_enabled = True
-        test_engine.state.playing = True
+        test_engine.state.playback_state = PlaybackState.PLAYING
 
         test_engine.handle_stop({})
 
