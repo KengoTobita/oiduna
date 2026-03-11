@@ -14,7 +14,7 @@ import pytest
 from oiduna_loop.engine import LoopEngine
 from oiduna_loop.engine.clock_generator import ClockGenerator
 from oiduna_loop.state import PlaybackState
-from oiduna_loop.tests.mocks import MockMidiOutput, MockStateSink
+from oiduna_loop.tests.mocks import MockMidiOutput, MockStateProducer
 
 
 class TestDriftResetConstants:
@@ -100,7 +100,7 @@ class TestLoopEngineDriftReset:
     async def test_handle_drift_reset_sends_error_notification(
         self,
         test_engine: LoopEngine,
-        mock_publisher: MockStateSink,
+        mock_publisher: MockStateProducer,
     ):
         """_handle_drift_reset should send error notification to API."""
         test_engine._step_anchor_time = time.perf_counter()
@@ -501,7 +501,7 @@ class TestBpmChangeDriftSuppression:
     async def test_drift_suppressed_with_flag(
         self,
         test_engine: LoopEngine,
-        mock_publisher: MockStateSink,
+        mock_publisher: MockStateProducer,
     ):
         """Drift reset notification should be suppressed when flag is set."""
         # Setup: suppression flag is set
@@ -525,7 +525,7 @@ class TestBpmChangeDriftSuppression:
     async def test_drift_reported_without_flag(
         self,
         test_engine: LoopEngine,
-        mock_publisher: MockStateSink,
+        mock_publisher: MockStateProducer,
     ):
         """Drift reset should be reported normally when flag is not set."""
         # Setup: no suppression flag

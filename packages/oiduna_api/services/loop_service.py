@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 
 from oiduna_loop.engine.loop_engine import LoopEngine
 from oiduna_loop.factory import create_loop_engine
-from oiduna_loop.ipc.in_process import InProcessStateSink
+from oiduna_loop.ipc.in_process import InProcessStateProducer
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ class LoopService:
 
     def __init__(self) -> None:
         self._engine: LoopEngine | None = None
-        self._state_sink: InProcessStateSink | None = None
+        self._state_producer: InProcessStateProducer | None = None
 
     def initialize(
         self,
@@ -44,12 +44,12 @@ class LoopService:
         if self._engine is not None:
             return
 
-        self._state_sink = InProcessStateSink()
+        self._state_producer = InProcessStateProducer()
         self._engine = create_loop_engine(
             osc_host=osc_host,
             osc_port=osc_port,
             midi_port=midi_port_name,
-            state_sink=self._state_sink,
+            state_producer=self._state_producer,
             before_send_hooks=before_send_hooks,
         )
         # receive_port is for Phase 1 SuperDirt integration (not yet implemented)
@@ -60,11 +60,11 @@ class LoopService:
             raise RuntimeError("Engine not initialized. Call initialize() first.")
         return self._engine
 
-    def get_state_sink(self) -> InProcessStateSink:
-        """Get the state sink (for SSE endpoint)"""
-        if self._state_sink is None:
+    def get_state_producer(self) -> InProcessStateProducer:
+        """Get the state producer (for SSE endpoint)"""
+        if self._state_producer is None:
             raise RuntimeError("Engine not initialized. Call initialize() first.")
-        return self._state_sink
+        return self._state_producer
 
     def connect_timeline(self, container) -> None:
         """

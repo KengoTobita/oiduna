@@ -7,7 +7,7 @@ before loading sessions.
 
 import pytest
 from oiduna_loop.engine.loop_engine import LoopEngine
-from oiduna_loop.tests.mocks import MockCommandSource, MockMidiOutput, MockOscOutput, MockStateSink
+from oiduna_loop.tests.mocks import MockCommandConsumer, MockMidiOutput, MockOscOutput, MockStateProducer
 from oiduna_scheduler.scheduler_models import ScheduledMessageBatch, ScheduledMessage
 
 
@@ -19,8 +19,8 @@ class TestSessionDestinationValidation:
         """Create a fresh LoopEngine instance with mock dependencies."""
         mock_osc = MockOscOutput()
         mock_midi = MockMidiOutput()
-        mock_commands = MockCommandSource()
-        mock_publisher = MockStateSink()
+        mock_commands = MockCommandConsumer()
+        mock_publisher = MockStateProducer()
 
         engine = LoopEngine(
             osc=mock_osc,

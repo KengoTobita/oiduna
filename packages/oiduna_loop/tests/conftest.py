@@ -17,7 +17,7 @@ sys.path.insert(0, str(root_dir / "packages"))
 import pytest
 
 from ..engine import LoopEngine
-from .mocks import MockCommandSource, MockMidiOutput, MockOscOutput, MockStateSink
+from .mocks import MockCommandConsumer, MockMidiOutput, MockOscOutput, MockStateProducer
 
 
 @pytest.fixture
@@ -33,23 +33,23 @@ def mock_osc() -> MockOscOutput:
 
 
 @pytest.fixture
-def mock_commands() -> MockCommandSource:
-    """Create a fresh MockCommandSource for testing."""
-    return MockCommandSource()
+def mock_commands() -> MockCommandConsumer:
+    """Create a fresh MockCommandConsumer for testing."""
+    return MockCommandConsumer()
 
 
 @pytest.fixture
-def mock_publisher() -> MockStateSink:
-    """Create a fresh MockStateSink for testing."""
-    return MockStateSink()
+def mock_publisher() -> MockStateProducer:
+    """Create a fresh MockStateProducer for testing."""
+    return MockStateProducer()
 
 
 @pytest.fixture
 def test_engine(
     mock_osc: MockOscOutput,
     mock_midi: MockMidiOutput,
-    mock_commands: MockCommandSource,
-    mock_publisher: MockStateSink,
+    mock_commands: MockCommandConsumer,
+    mock_publisher: MockStateProducer,
 ) -> LoopEngine:
     """
     Create a LoopEngine with all mock dependencies.

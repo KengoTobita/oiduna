@@ -15,7 +15,7 @@ def get_container() -> SessionContainer:
     """
     Get the singleton SessionContainer instance.
 
-    On first call, injects the event sink from LoopService for SSE events.
+    On first call, injects the event publisher from LoopService for SSE events.
 
     Usage:
         @router.get("/tracks")
@@ -26,16 +26,16 @@ def get_container() -> SessionContainer:
     """
     global _container
     if _container is None:
-        # Get event sink from LoopService
-        event_sink = None
+        # Get event publisher from LoopService
+        event_publisher = None
         try:
             loop_service = get_loop_service()
-            event_sink = loop_service.get_state_sink()
+            event_publisher = loop_service.get_state_producer()
         except RuntimeError:
             # LoopService not initialized yet (e.g., during testing)
             pass
 
-        _container = SessionContainer(event_sink=event_sink)
+        _container = SessionContainer(event_publisher=event_publisher)
     return _container
 
 

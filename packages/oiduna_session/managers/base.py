@@ -14,7 +14,7 @@ class SessionEventPublisher(Protocol):
     This is distinct from StateProducer (Loop layer state updates like position, status).
 
     Implementations:
-        - InProcessStateSink: In-process queue-based implementation
+        - InProcessStateProducer: In-process queue-based implementation
 
     Example events:
         - client_connected, client_disconnected

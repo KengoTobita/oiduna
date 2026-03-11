@@ -130,7 +130,7 @@ Full flow validated:
    - Graceful degradation: operations work without event sink
 
 3. **Event Sink Integration** ✅
-   - SessionManager initialized with InProcessStateSink
+   - SessionManager initialized with InProcessStateProducer
    - LoopService state sink injected during startup
    - SSE endpoint documentation updated with new events
 

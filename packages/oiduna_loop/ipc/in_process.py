@@ -18,15 +18,13 @@ logger = logging.getLogger(__name__)
 _DEFAULT_QUEUE_SIZE = 128
 
 
-class NoopCommandSource:
+class NoopCommandConsumer:
     """No-op command consumer (CommandConsumer protocol).
 
-    Implements CommandConsumer protocol (formerly CommandSource).
+    Implements CommandConsumer protocol.
     process_commands() always returns 0, so the _command_loop
     backoff path fires immediately and the task sleeps at full
     interval, consuming minimal CPU.
-
-    This class satisfies both CommandConsumer and CommandSource (legacy) protocols.
     """
 
     def connect(self) -> None:
@@ -51,7 +49,7 @@ class NoopCommandSource:
         pass
 
 
-class InProcessStateSink:
+class InProcessStateProducer:
     """In-process state producer and session event publisher.
 
     Implements two protocols:
@@ -97,7 +95,7 @@ class InProcessStateSink:
         pass
 
     # ----------------------------------------------------------
-    # StateSink protocol methods
+    # StateProducer protocol methods
     # ----------------------------------------------------------
 
     async def send_position(

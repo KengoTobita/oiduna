@@ -142,7 +142,7 @@ class MockOscOutput:
 
 
 @dataclass
-class MockCommandSource:
+class MockCommandConsumer:
     """
     Test double for CommandSource protocol.
 
@@ -197,7 +197,7 @@ class MockCommandSource:
 
 
 @dataclass
-class MockStateSink:
+class MockStateProducer:
     """
     Test double for StateSink protocol.
 

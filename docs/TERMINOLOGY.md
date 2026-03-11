@@ -99,7 +99,7 @@ hihat = PatternEvent(step=64, cycle=1.0, params={"sound": "hh", "gain": 0.6})
 
 **使用箇所**:
 - `BaseManager._emit_event()` - 各Managerから発火
-- `InProcessStateSink.publish()` - SSE配信用キューに蓄積
+- `InProcessStateProducer.publish()` - SSE配信用キューに蓄積
 
 **例**:
 ```python
@@ -182,14 +182,14 @@ data: {"timestamp": 1234567890.123}
 │ Session層: SessionEvent（CRUD通知）                  │
 │   BaseManager._emit_event()                         │
 │       ↓ SessionEventPublisher.publish()             │
-│   InProcessStateSink._queue ←┐                      │
+│   InProcessStateProducer._queue ←┐                      │
 └──────────────────────────────┼──────────────────────┘
                                │
 ┌──────────────────────────────┼──────────────────────┐
 │ Loop層: StateProducer（再生状態）                    │
 │   LoopEngine.send_position() │                      │
 │       ↓ StateProducer        │                      │
-│   InProcessStateSink._queue ─┘                      │
+│   InProcessStateProducer._queue ─┘                      │
 └──────────────────────────────┬──────────────────────┘
                                │ 統合キュー
                                ↓

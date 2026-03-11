@@ -157,12 +157,12 @@ def create_loop_engine(
 
 ## 実装クラスの対応
 
-### NoopCommandSource → CommandConsumer実装
+### NoopCommandConsumer → CommandConsumer実装
 
 ```python
 # in_process.py
 
-class NoopCommandSource:
+class NoopCommandConsumer:
     """
     No-op command consumer (CommandConsumer protocol).
 
@@ -174,12 +174,12 @@ class NoopCommandSource:
         return 0
 ```
 
-### InProcessStateSink → StateProducer実装
+### InProcessStateProducer → StateProducer実装
 
 ```python
 # in_process.py
 
-class InProcessStateSink:
+class InProcessStateProducer:
     """
     In-process state producer (StateProducer protocol).
 
@@ -204,8 +204,8 @@ class InProcessStateSink:
 def test_engine(
     mock_osc: MockOscOutput,
     mock_midi: MockMidiOutput,
-    mock_commands: MockCommandSource,
-    mock_publisher: MockStateSink,
+    mock_commands: MockCommandConsumer,
+    mock_publisher: MockStateProducer,
 ) -> LoopEngine:
     engine = LoopEngine(
         osc=mock_osc,

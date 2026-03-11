@@ -25,7 +25,7 @@ from typing import Any
 import pytest
 
 from oiduna_loop.engine import LoopEngine
-from oiduna_loop.tests.mocks import MockCommandSource, MockMidiOutput, MockOscOutput, MockStateSink
+from oiduna_loop.tests.mocks import MockCommandConsumer, MockMidiOutput, MockOscOutput, MockStateProducer
 
 # Skip stability tests unless explicitly enabled
 STABILITY_TESTS_ENABLED = os.environ.get("RUN_STABILITY_TESTS", "0") == "1"
@@ -42,8 +42,8 @@ class StabilityTestEngine:
         self,
         osc: MockOscOutput,
         midi: MockMidiOutput,
-        commands: MockCommandSource,
-        publisher: MockStateSink,
+        commands: MockCommandConsumer,
+        publisher: MockStateProducer,
     ):
         self.engine = LoopEngine(
             osc=osc,
@@ -91,8 +91,8 @@ class StabilityTestEngine:
 def stability_engine(
     mock_osc: MockOscOutput,
     mock_midi: MockMidiOutput,
-    mock_commands: MockCommandSource,
-    mock_publisher: MockStateSink,
+    mock_commands: MockCommandConsumer,
+    mock_publisher: MockStateProducer,
 ) -> StabilityTestEngine:
     """Create a stability test engine."""
     return StabilityTestEngine(mock_osc, mock_midi, mock_commands, mock_publisher)
@@ -499,8 +499,8 @@ class TestConcurrentLoops:
         self,
         mock_osc: MockOscOutput,
         mock_midi: MockMidiOutput,
-        mock_commands: MockCommandSource,
-        mock_publisher: MockStateSink,
+        mock_commands: MockCommandConsumer,
+        mock_publisher: MockStateProducer,
     ):
         """Run both loops concurrently and verify synchronization."""
         engine = LoopEngine(
@@ -593,8 +593,8 @@ class TestHighEventDensity:
         self,
         mock_osc: MockOscOutput,
         mock_midi: MockMidiOutput,
-        mock_commands: MockCommandSource,
-        mock_publisher: MockStateSink,
+        mock_commands: MockCommandConsumer,
+        mock_publisher: MockStateProducer,
     ):
         """Test with 16 tracks, events on every step."""
         engine = LoopEngine(
@@ -667,8 +667,8 @@ class TestHighEventDensity:
         self,
         mock_osc: MockOscOutput,
         mock_midi: MockMidiOutput,
-        mock_commands: MockCommandSource,
-        mock_publisher: MockStateSink,
+        mock_commands: MockCommandConsumer,
+        mock_publisher: MockStateProducer,
     ):
         """Test recompiling session while playing (live coding scenario)."""
         engine = LoopEngine(
@@ -733,8 +733,8 @@ class TestStabilitySummary:
         self,
         mock_osc: MockOscOutput,
         mock_midi: MockMidiOutput,
-        mock_commands: MockCommandSource,
-        mock_publisher: MockStateSink,
+        mock_commands: MockCommandConsumer,
+        mock_publisher: MockStateProducer,
     ):
         """Quick comprehensive stability check (2 second version of each test)."""
         engine = LoopEngine(

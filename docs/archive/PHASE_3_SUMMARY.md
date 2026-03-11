@@ -83,7 +83,7 @@ def get_session_manager() -> SessionManager:
 
 **統合フロー**:
 1. API起動時にLoopServiceが初期化される
-2. LoopServiceがInProcessStateSinkを作成
+2. LoopServiceがInProcessStateProducerを作成
 3. SessionManagerがそのsinkを受け取る
 4. CRUD操作時にSSEイベントが自動発行される
 5. `/stream`エンドポイントでクライアントがイベント受信
@@ -216,7 +216,7 @@ data: {"track_id":"test","track_name":"kick","client_id":"alice","destination_id
     ↓
 [manager._emit_event("track_created", data)]
     ↓
-[InProcessStateSink._push(event)]
+[InProcessStateProducer._push(event)]
     ↓
 [asyncio.Queue.put_nowait(event)]
     ↓
@@ -230,7 +230,7 @@ data: {"track_id":"test","track_name":"kick","client_id":"alice","destination_id
 ```
 main.py (lifespan)
     ↓
-[LoopService] → InProcessStateSink
+[LoopService] → InProcessStateProducer
     ↓
 [SessionManager(event_sink=sink)]
     ↓
@@ -269,7 +269,7 @@ def _emit_event(self, event_type: str, data: dict[str, Any]) -> None:
 **判断**: `EventSink`をProtocolとして定義
 
 **理由**:
-- InProcessStateSinkへの直接依存を避ける
+- InProcessStateProducerへの直接依存を避ける
 - テストでモック実装が容易
 - 将来的に別のイベントシステムへの切り替えが可能
 
@@ -443,7 +443,7 @@ Phase 3で実装した主要機能：
    - 全CRUD操作で発行
 
 ✅ **イベントシンク統合**
-   - SessionManager ← InProcessStateSink
+   - SessionManager ← InProcessStateProducer
    - オプショナル設計（テスト容易）
 
 ✅ **完全なテストカバレッジ**

@@ -11,7 +11,7 @@ import pytest
 from ..engine import LoopEngine
 from ..output.midi_sender import MidiSender
 from ..state import PlaybackState
-from .mocks import MockCommandSource, MockMidiOutput
+from .mocks import MockCommandConsumer, MockMidiOutput
 
 
 class TestMidiSenderRetry:
@@ -58,7 +58,7 @@ class TestPanicCommand:
     def test_panic_handler_registered(
         self,
         test_engine: LoopEngine,
-        mock_commands: MockCommandSource,
+        mock_commands: MockCommandConsumer,
     ) -> None:
         """Panic command handler should be registered."""
         assert "panic" in mock_commands._handlers
@@ -68,7 +68,7 @@ class TestPanicCommand:
         self,
         test_engine: LoopEngine,
         mock_midi: MockMidiOutput,
-        mock_commands: MockCommandSource,
+        mock_commands: MockCommandConsumer,
     ) -> None:
         """Panic command should send all notes off."""
         # Enable MIDI

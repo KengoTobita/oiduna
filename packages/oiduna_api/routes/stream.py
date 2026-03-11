@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends
 from starlette.responses import StreamingResponse
 
 from oiduna_api.services.loop_service import LoopService, get_loop_service
-from oiduna_loop.ipc.in_process import InProcessStateSink
+from oiduna_loop.ipc.in_process import InProcessStateProducer
 
 router = APIRouter()
 
@@ -16,7 +16,7 @@ router = APIRouter()
 _HEARTBEAT_INTERVAL = 15.0
 
 
-async def _event_stream(sink: InProcessStateSink):
+async def _event_stream(sink: InProcessStateProducer):
     """Async generator that yields SSE-formatted events."""
     # Send initial connected event
     yield _sse_event("connected", {"timestamp": time.time()})
@@ -61,7 +61,7 @@ async def stream_events(
     - pattern_deleted     — pattern removed
     - environment_updated — BPM or metadata changed
     """
-    sink = loop_service.get_state_sink()
+    sink = loop_service.get_state_producer()
     return StreamingResponse(
         _event_stream(sink),
         media_type="text/event-stream",

@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 
 from oiduna_loop.engine import LoopEngine
-from oiduna_loop.tests.mocks import MockStateSink
+from oiduna_loop.tests.mocks import MockStateProducer
 
 
 class TestHeartbeatLoop:
@@ -75,7 +75,7 @@ class TestSendHeartbeat:
     async def test_send_heartbeat_sends_message(
         self,
         test_engine: LoopEngine,
-        mock_publisher: MockStateSink,
+        mock_publisher: MockStateProducer,
     ) -> None:
         """send_heartbeat should send a heartbeat message."""
         await test_engine.send_heartbeat()
@@ -88,7 +88,7 @@ class TestSendHeartbeat:
     async def test_send_heartbeat_includes_timestamp(
         self,
         test_engine: LoopEngine,
-        mock_publisher: MockStateSink,
+        mock_publisher: MockStateProducer,
     ) -> None:
         """send_heartbeat should include timestamp in payload."""
         await test_engine.send_heartbeat()
@@ -98,14 +98,14 @@ class TestSendHeartbeat:
         assert "timestamp" in heartbeats[0]
 
 
-class TestMockStateSinkHeartbeat:
-    """Tests for MockStateSink heartbeat tracking."""
+class TestMockStateProducerHeartbeat:
+    """Tests for MockStateProducer heartbeat tracking."""
 
     def test_mock_tracks_heartbeat_messages(
         self,
-        mock_publisher: MockStateSink,
+        mock_publisher: MockStateProducer,
     ) -> None:
-        """MockStateSink should track heartbeat messages via send()."""
+        """MockStateProducer should track heartbeat messages via send()."""
         import asyncio
 
         async def send_hb():

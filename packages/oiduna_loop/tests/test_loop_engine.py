@@ -157,7 +157,7 @@ class TestLoopEngineCommands:
 
 
 class TestLoopEngineCommandInjection:
-    """Test command processing via MockCommandSource."""
+    """Test command processing via MockCommandConsumer."""
 
     @pytest.mark.asyncio
     async def test_process_play_command(

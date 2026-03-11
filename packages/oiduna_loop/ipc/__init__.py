@@ -1,12 +1,12 @@
 """Oiduna Loop IPC — protocols, serialization, and in-process implementations."""
 
-from .in_process import InProcessStateSink, NoopCommandSource
+from .in_process import InProcessStateProducer, NoopCommandConsumer
 from .serializer import IPCSerializer, SerializationFormat
 
 __all__ = [
     # In-process implementations
-    "NoopCommandSource",
-    "InProcessStateSink",
+    "NoopCommandConsumer",
+    "InProcessStateProducer",
     # Serialization
     "IPCSerializer",
     "SerializationFormat",

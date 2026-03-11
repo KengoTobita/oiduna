@@ -11,7 +11,7 @@ import pytest
 from oiduna_loop.engine import LoopEngine
 from oiduna_loop.output.midi_sender import MidiSender
 from oiduna_loop.state import PlaybackState
-from oiduna_loop.tests.mocks import MockCommandSource, MockMidiOutput
+from oiduna_loop.tests.mocks import MockCommandConsumer, MockMidiOutput
 
 
 class TestMidiSenderRetry:
@@ -58,7 +58,7 @@ class TestPanicCommand:
     def test_panic_handler_registered(
         self,
         test_engine: LoopEngine,
-        mock_commands: MockCommandSource,
+        mock_commands: MockCommandConsumer,
     ) -> None:
         """Panic command handler should be registered."""
         assert "panic" in mock_commands._handlers
@@ -68,7 +68,7 @@ class TestPanicCommand:
         self,
         test_engine: LoopEngine,
         mock_midi: MockMidiOutput,
-        mock_commands: MockCommandSource,
+        mock_commands: MockCommandConsumer,
     ) -> None:
         """Panic command should send all notes off."""
         # Enable MIDI
@@ -86,7 +86,7 @@ class TestPanicCommand:
     async def test_panic_stops_playback(
         self,
         test_engine: LoopEngine,
-        mock_commands: MockCommandSource,
+        mock_commands: MockCommandConsumer,
     ) -> None:
         """Panic command should stop playback."""
         # Setup: Start playing
@@ -104,7 +104,7 @@ class TestPanicCommand:
     async def test_panic_resets_position(
         self,
         test_engine: LoopEngine,
-        mock_commands: MockCommandSource,
+        mock_commands: MockCommandConsumer,
     ) -> None:
         """Panic command should reset position to 0."""
         # Setup: Start playing and advance position

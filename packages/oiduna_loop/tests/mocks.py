@@ -127,9 +127,9 @@ class MockOscOutput:
 
 
 @dataclass
-class MockCommandSource:
+class MockCommandConsumer:
     """
-    Test double for CommandSource protocol.
+    Test double for CommandConsumer protocol.
 
     Allows injecting commands from tests.
     """
@@ -182,9 +182,9 @@ class MockCommandSource:
 
 
 @dataclass
-class MockStateSink:
+class MockStateProducer:
     """
-    Test double for StateSink protocol.
+    Test double for StateProducer protocol.
 
     Records all published state messages for test assertions.
     """

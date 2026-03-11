@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 
 from oiduna_loop.engine import LoopEngine
-from oiduna_loop.tests.mocks import MockMidiOutput, MockOscOutput, MockStateSink
+from oiduna_loop.tests.mocks import MockMidiOutput, MockOscOutput, MockStateProducer
 
 
 class TestConnectionStatusTracking:
@@ -46,7 +46,7 @@ class TestConnectionStatusNotification:
         self,
         test_engine: LoopEngine,
         mock_midi: MockMidiOutput,
-        mock_publisher: MockStateSink,
+        mock_publisher: MockStateProducer,
     ) -> None:
         """Should send error when MIDI disconnects."""
         # Setup: MIDI was connected
@@ -69,7 +69,7 @@ class TestConnectionStatusNotification:
         self,
         test_engine: LoopEngine,
         mock_osc: MockOscOutput,
-        mock_publisher: MockStateSink,
+        mock_publisher: MockStateProducer,
     ) -> None:
         """Should send error when OSC disconnects."""
         # Setup: OSC was connected
@@ -92,7 +92,7 @@ class TestConnectionStatusNotification:
         self,
         test_engine: LoopEngine,
         mock_midi: MockMidiOutput,
-        mock_publisher: MockStateSink,
+        mock_publisher: MockStateProducer,
     ) -> None:
         """Should not send notification if status hasn't changed."""
         # Setup: MIDI was already disconnected

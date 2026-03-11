@@ -45,7 +45,7 @@ class LoopEngine:
 - 両方とも「イベント/状態」を扱うが、**異なるレイヤー**
 - `EventSink`と`StateSink`という名前が似ている
 - どちらがどの責任を持つか不明確
-- InProcessStateSinkが両方のProtocolを実装することで混乱が増す
+- InProcessStateProducerが両方のProtocolを実装することで混乱が増す
 
 ## Decision
 

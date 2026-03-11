@@ -15,7 +15,7 @@ from .ipc.protocols import (
 )
 
 from .engine import LoopEngine
-from .ipc import InProcessStateSink, NoopCommandSource
+from .ipc import InProcessStateProducer, NoopCommandConsumer
 from .output import MidiSender, OscSender
 
 
@@ -36,8 +36,8 @@ def create_loop_engine(
         osc_port: OSC destination port
         osc_address: OSC message address (default: "/dirt/play" for SuperDirt)
         midi_port: MIDI output port name (None for first available)
-        command_consumer: CommandConsumer implementation (default: NoopCommandSource).
-        state_producer: StateProducer implementation (default: InProcessStateSink).
+        command_consumer: CommandConsumer implementation (default: NoopCommandConsumer).
+        state_producer: StateProducer implementation (default: InProcessStateProducer).
         before_send_hooks: Extension hooks for runtime message transformation
 
     Returns:
@@ -46,9 +46,9 @@ def create_loop_engine(
     osc = OscSender(osc_host, osc_port, osc_address)
     midi = MidiSender(midi_port)
 
-    # Handle legacy parameter names
-    commands = command_consumer if command_consumer is not None else NoopCommandSource()
-    publisher = state_producer if state_producer is not None else InProcessStateSink()
+    # Use defaults if not provided
+    commands = command_consumer if command_consumer is not None else NoopCommandConsumer()
+    publisher = state_producer if state_producer is not None else InProcessStateProducer()
 
     return LoopEngine(
         osc=osc,
