@@ -1,19 +1,28 @@
-# IPC Naming Migration Guide
+# IPC and Event Naming Migration Guide
 
-**⚠️ v3.0 重要**: 旧命名（CommandSink/Source, StateSink/Source）は **完全削除されました**（2026-03-11）。
-すべてのコードでProducer/Consumer命名を使用してください。詳細は [ADR-0021](knowledge/adr/0021-backward-compatibility-removal.md) を参照。
+**⚠️ v3.1 重要**: 複数の命名改善が実施されました（2026-03-11）：
+- Loop層IPC: CommandSink/Source, StateSink/Source → Producer/Consumer（v3.0完了）
+- ドメイン層: Event → **PatternEvent**（v3.1）
+- Session層: SessionEventSink → **SessionEventPublisher**（v3.1）
+
+詳細は [ADR-0021](knowledge/adr/0021-backward-compatibility-removal.md) を参照。
 
 ---
 
 ## 概要
 
-oiduna v2.1以降、IPCプロトコルの命名を**Producer/Consumerパターン**に移行しました。
+oiduna v2.1以降、命名を段階的に改善し、用語の曖昧性を解消しました：
+
+1. **Loop層IPC命名**（v2.1-v3.0）: Producer/Consumerパターン
+2. **ドメイン層Event命名**（v3.1）: Event → PatternEvent
+3. **Session層EventSink命名**（v3.1）: SessionEventSink → SessionEventPublisher
 
 この変更により、データの流れる方向と命名が直感的に一致し、コードの可読性が向上します。
 
 **移行タイムライン**:
-- **v2.1**: Producer/Consumer導入、旧名はaliasとして残存
-- **v3.0**: 旧名を完全削除（ADR-0021）
+- **v2.1**: Producer/Consumer導入（IPC）
+- **v3.0**: Sink/Source旧名を完全削除（ADR-0021）
+- **v3.1**: Event → PatternEvent、SessionEventPublisher導入
 
 ## 変更の背景
 
@@ -215,7 +224,8 @@ def test_engine(
 |-----------|------|------|
 | **v2.1** | 新Protocolを追加 | CommandProducer, CommandConsumer, StateProducer, StateConsumer追加 |
 | **v2.2** | 旧Protocol警告 | CommandSink, CommandSource, StateSink, StateSourceにdeprecation警告 |
-| **v3.0** (現在) | 旧Protocol削除 | 旧Protocolを完全削除（2026-03-11） |
+| **v3.0** | 旧Protocol削除 | IPC旧Protocolを完全削除（2026-03-11） |
+| **v3.1** (現在) | Event/EventSink改名 | Event → PatternEvent、SessionEventSink → SessionEventPublisher |
 
 ---
 
@@ -246,24 +256,38 @@ engine = LoopEngine(
 - `self._commands` → `self._command_consumer` （エイリアスとして`_commands`も残存）
 - `self._publisher` → `self._state_producer` （エイリアスとして`_publisher`も残存）
 
+### Q4: Event → PatternEvent の変更理由は？（v3.1）
+
+**A**: 「Event」という用語が3つの異なる意味で使われ、混乱を引き起こしていました：
+
+1. **PatternEvent（旧Event）**: ドメイン層の音楽イベント（step, cycle, params）
+2. **SessionEvent**: Session層のCRUD通知（dict型）
+3. **SSE Event**: HTTP層のServer-Sent Events（string）
+
+「Event」から「PatternEvent」への改名により、役割が明確になりました。
+
+詳細は [TERMINOLOGY.md](TERMINOLOGY.md) の「Event用語の分類」セクションを参照。
+
 ---
 
 ## まとめ
 
-### メリット
+### メリット（v3.1）
 
 ✅ **明確性**: Producer/Consumerで役割が一目瞭然
 ✅ **一貫性**: 変数名と型名が一致
 ✅ **直感性**: データフローが命名から理解できる
 ✅ **標準性**: 業界標準パターン（Kafka, RabbitMQ等）
+✅ **Event曖昧性解消**: PatternEvent、SessionEvent、SSE Eventの責任が明確
 
-### 互換性
+### 互換性（v3.1）
 
-✅ 旧Protocolも引き続き動作
-✅ 段階的な移行が可能
-✅ 全テストがパス（301 passed）
+❌ **後方互換性なし**: 旧Protocol名（CommandSink/Source, StateSink/Source）は完全削除
+❌ **後方互換性なし**: Event → PatternEvent、SessionEventSink → SessionEventPublisher
+✅ 全テストがパス（680 passed）
+✅ 型安全性維持（mypy strict）
 
 ---
 
-**更新日**: 2026-03-02
-**適用バージョン**: v2.1以降
+**更新日**: 2026-03-11
+**適用バージョン**: v3.1以降

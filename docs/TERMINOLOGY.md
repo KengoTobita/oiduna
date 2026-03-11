@@ -36,6 +36,180 @@
 
 ## データ構造の用語
 
+### Event用語の分類（重要）
+
+Oidunaでは「Event」という用語が**3つの異なる意味**で使用されています。
+それぞれ異なるレイヤーに属し、目的が全く異なります。
+
+#### 1️⃣ PatternEvent（パターン内音楽イベント）
+
+**定義**: Pattern内の1つの音楽的イベント（ステップ、サイクル、パラメータ）
+
+**レイヤー**: ドメインモデル層（oiduna_models）
+
+**データ型**:
+```python
+PatternEvent(
+    step: int,        # 0-255（量子化ステップ）
+    cycle: float,     # 0.0-4.0（精密タイミング）
+    params: dict      # 音響パラメータ
+)
+```
+
+**使用箇所**:
+- `Pattern.events: list[PatternEvent]` - パターンが持つ音楽イベントリスト
+- SessionCompiler で ScheduledMessage に変換される
+
+**例**:
+```python
+# キックドラム（ステップ0）
+kick = PatternEvent(step=0, cycle=0.0, params={"sound": "bd", "gain": 0.8})
+
+# ハイハット（ステップ64）
+hihat = PatternEvent(step=64, cycle=1.0, params={"sound": "hh", "gain": 0.6})
+```
+
+**頻度**: 多数（パターンごとに0〜数百個）
+
+---
+
+#### 2️⃣ SessionEvent（CRUD操作イベント）
+
+**定義**: Session層のデータ変更を通知するイベント（辞書型）
+
+**レイヤー**: Session層（oiduna_session）
+
+**データ型**:
+```python
+{
+    "type": str,     # イベント種別（例: "track_created"）
+    "data": dict     # イベント固有データ
+}
+```
+
+**イベント種類** (29種):
+- Client: `client_connected`, `client_disconnected`
+- Track: `track_created`, `track_updated`, `track_deleted`
+- Pattern: `pattern_created`, `pattern_updated`, `pattern_archived`, `pattern_moved`
+- Environment: `environment_updated`
+- Destination: `destination_removed`
+- Timeline: `change_scheduled`, `change_cancelled`
+
+**Protocol**: `SessionEventPublisher.publish(event: dict)`
+
+**使用箇所**:
+- `BaseManager._emit_event()` - 各Managerから発火
+- `InProcessStateSink.publish()` - SSE配信用キューに蓄積
+
+**例**:
+```python
+# パターン作成通知
+{
+    "type": "pattern_created",
+    "data": {
+        "pattern_id": "3e2b",
+        "track_id": "0a1f",
+        "client_id": "alice",
+        "event_count": 2  # ← PatternEventが2個あることを通知
+    }
+}
+```
+
+**頻度**: 低頻度（ユーザー操作時のみ）
+
+---
+
+#### 3️⃣ SSE Event（HTTPストリーミングイベント）
+
+**定義**: Server-Sent Events（HTTP仕様）のイベント形式
+
+**レイヤー**: HTTP層（oiduna_api）
+
+**データ型**: 文字列（HTTP SSE形式）
+```
+event: {event_type}
+data: {json_data}
+
+```
+
+**使用箇所**:
+- `/api/stream/events` endpoint
+- `_sse_event()` - SSE形式への変換関数
+- ブラウザの `EventSource` APIで受信
+
+**統合配信**: SessionEvent と StateProducer の両方を統合配信
+
+**例**:
+```
+event: pattern_created
+data: {"pattern_id": "3e2b", "event_count": 2}
+
+event: position
+data: {"step": 0, "beat": 0, "cycle": 0.0}
+
+event: heartbeat
+data: {"timestamp": 1234567890.123}
+```
+
+**頻度**: 高頻度（SessionEvent + StateProducer の統合）
+
+---
+
+#### Event用語の比較表
+
+| 項目 | PatternEvent | SessionEvent | SSE Event |
+|------|-------------|--------------|-----------|
+| **レイヤー** | ドメインモデル | Session層 | HTTP層 |
+| **データ型** | PatternEvent class | dict | string |
+| **目的** | 音楽的タイミング | CRUD通知 | HTTP配信 |
+| **頻度** | 多数（パターン内） | 低頻度（操作時） | 高頻度（統合） |
+| **送信先** | SessionCompiler | SSE endpoint | ブラウザ |
+| **例** | `PatternEvent(step=0, ...)` | `{"type": "track_created"}` | `"event: ...\ndata: ...\n\n"` |
+
+#### データフロー全体図
+
+```
+┌─────────────────────────────────────────────────────┐
+│ ドメイン層: PatternEvent（音楽イベント）              │
+│   Pattern.events: list[PatternEvent]                │
+│       ↓ SessionCompiler                             │
+│   ScheduledMessageBatch                             │
+│       ↓ Loop Engine                                 │
+│   音楽再生                                           │
+└─────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────┐
+│ Session層: SessionEvent（CRUD通知）                  │
+│   BaseManager._emit_event()                         │
+│       ↓ SessionEventPublisher.publish()             │
+│   InProcessStateSink._queue ←┐                      │
+└──────────────────────────────┼──────────────────────┘
+                               │
+┌──────────────────────────────┼──────────────────────┐
+│ Loop層: StateProducer（再生状態）                    │
+│   LoopEngine.send_position() │                      │
+│       ↓ StateProducer        │                      │
+│   InProcessStateSink._queue ─┘                      │
+└──────────────────────────────┬──────────────────────┘
+                               │ 統合キュー
+                               ↓
+┌─────────────────────────────────────────────────────┐
+│ HTTP層: SSE Event（ストリーミング配信）              │
+│   /api/stream/events                                │
+│       ↓ _sse_event()                                │
+│   EventSource API（ブラウザ）                        │
+└─────────────────────────────────────────────────────┘
+```
+
+#### 命名の歴史
+
+- **v3.0以前**: 全て「Event」と呼ばれ、混乱の原因
+- **v3.1**: PatternEvent に改名、SessionEventPublisher Protocol導入
+- SessionEvent は Protocol名（SessionEventPublisher）で区別
+- SSE Event は HTTP仕様の用語として明示
+
+---
+
 ### パターンデータ
 
 | 用語 | 型 | 説明 |
