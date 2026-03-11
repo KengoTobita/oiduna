@@ -62,7 +62,7 @@ class BaseExtension(ABC):
 
     def before_send_messages(
         self,
-        messages: list[Any],  # list[ScheduledMessage] but avoid circular import
+        messages: list[Any],  # list[ScheduleEntry] but avoid circular import
         current_bpm: float,
         current_step: int,
     ) -> list[Any]:
@@ -72,7 +72,7 @@ class BaseExtension(ABC):
         Called at runtime in the step loop, just before DestinationRouter.send_messages().
 
         Args:
-            messages: List of ScheduledMessage instances for this step
+            messages: List of ScheduleEntry instances for this step
             current_bpm: Current BPM (may have changed since session load)
             current_step: Current step position (0-255)
 

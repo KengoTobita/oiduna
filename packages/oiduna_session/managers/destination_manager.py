@@ -4,7 +4,7 @@ from typing import Optional
 from oiduna_models import Session
 from oiduna_models import DestinationConfig
 from oiduna_session.validator import SessionValidator
-from .base import BaseManager, SessionEventPublisher
+from .base import BaseManager, SessionChangePublisher
 
 
 class DestinationManager(BaseManager):
@@ -17,7 +17,7 @@ class DestinationManager(BaseManager):
     def __init__(
         self,
         session: Session,
-        event_publisher: Optional[SessionEventPublisher] = None,
+        event_publisher: Optional[SessionChangePublisher] = None,
     ) -> None:
         """
         Initialize the DestinationManager.
@@ -75,7 +75,7 @@ class DestinationManager(BaseManager):
         del self.session.destinations[destination_id]
 
         # Emit event
-        self._emit_event("destination_removed", {
+        self._emit_change("destination_removed", {
             "destination_id": destination_id,
         })
 

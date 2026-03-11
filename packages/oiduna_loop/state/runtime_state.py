@@ -1,7 +1,7 @@
 """
 Oiduna Loop Runtime State
 
-Simplified runtime state for ScheduledMessageBatch architecture.
+Simplified runtime state for LoopSchedule architecture.
 
 Responsibilities:
 1. Playback state (playing, paused, position)
@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any
 from ..constants import LOOP_STEPS
 
 if TYPE_CHECKING:
-    from oiduna_scheduler.scheduler_models import ScheduledMessage
+    from oiduna_scheduler.scheduler_models import ScheduleEntry
 
 # Timing constants (16th note resolution)
 STEPS_PER_BEAT = 4   # 4 steps (16th notes) per beat
@@ -69,7 +69,7 @@ class Position:
 @dataclass
 class RuntimeState:
     """
-    Simplified runtime state for ScheduledMessageBatch architecture.
+    Simplified runtime state for LoopSchedule architecture.
 
     Responsibilities:
     1. Playback state (playing, paused, position)
@@ -78,7 +78,7 @@ class RuntimeState:
     4. Active track tracking
 
     Note: This state no longer manages CompiledSession or Scenes.
-    All pattern data is handled via ScheduledMessageBatch.
+    All pattern data is handled via LoopSchedule.
     """
 
     # Playback state
@@ -203,8 +203,8 @@ class RuntimeState:
         return track_id in self._active_track_ids
 
     def filter_messages(
-        self, messages: list[ScheduledMessage]
-    ) -> list[ScheduledMessage]:
+        self, messages: list[ScheduleEntry]
+    ) -> list[ScheduleEntry]:
         """
         Filter messages based on mute/solo state.
 
@@ -216,7 +216,7 @@ class RuntimeState:
         Messages with unknown track_id are filtered out.
 
         Args:
-            messages: List of ScheduledMessage to filter
+            messages: List of ScheduleEntry to filter
 
         Returns:
             Filtered list of messages (only active tracks + trackless messages)

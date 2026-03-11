@@ -57,20 +57,20 @@ class TestSessionCompiler:
         """Test compiling empty session."""
         container = SessionContainer()
         batch = SessionCompiler.compile(container.session)
-        assert len(batch.messages) == 0
+        assert len(batch.entries) == 0
         assert batch.bpm == 120.0
 
     def test_compile_with_active_pattern(self, container):
         """Test compiling session with active pattern."""
         batch = SessionCompiler.compile(container.session)
-        assert len(batch.messages) == 2
+        assert len(batch.entries) == 2
         assert batch.bpm == 120.0
 
         # Get track_id dynamically
         track_id = list(container.session.tracks.keys())[0]
 
         # Check first message
-        msg = batch.messages[0]
+        msg = batch.entries[0]
         assert msg.destination_id == "superdirt"
         assert msg.step == 0
         assert msg.cycle == 0.0
@@ -79,7 +79,7 @@ class TestSessionCompiler:
         assert msg.params["track_id"] == track_id
 
         # Check second message (event params override base params)
-        msg = batch.messages[1]
+        msg = batch.entries[1]
         assert msg.step == 64
         assert msg.cycle == 1.0
         assert msg.params["gain"] == 0.9
@@ -95,7 +95,7 @@ class TestSessionCompiler:
         container.patterns.update(pattern_id, active=False)
 
         batch = SessionCompiler.compile(container.session)
-        assert len(batch.messages) == 0
+        assert len(batch.entries) == 0
 
     def test_compile_with_archived_pattern(self, container):
         """Test archived patterns are skipped (even if active=True)."""
@@ -114,7 +114,7 @@ class TestSessionCompiler:
 
         # Compile should skip archived patterns
         batch = SessionCompiler.compile(container.session)
-        assert len(batch.messages) == 0
+        assert len(batch.entries) == 0
 
     def test_compile_multiple_tracks(self, container):
         """Test compiling multiple tracks."""
@@ -137,17 +137,17 @@ class TestSessionCompiler:
         )
 
         batch = SessionCompiler.compile(container.session)
-        assert len(batch.messages) == 3  # 2 from track_001 + 1 from track_002
+        assert len(batch.entries) == 3  # 2 from track_001 + 1 from track_002
 
     def test_compile_track(self, container):
         """Test compiling a single track."""
         # Get dynamic track_id
         track_id = list(container.session.tracks.keys())[0]
-        
-        messages = SessionCompiler.compile_track(container.session, track_id)
-        assert len(messages) == 2
 
-        msg = messages[0]
+        entries = SessionCompiler.compile_track(container.session, track_id)
+        assert len(entries) == 2
+
+        msg = entries[0]
         assert msg.destination_id == "superdirt"
         assert msg.params["sound"] == "bd"
         assert msg.params["track_id"] == track_id
@@ -161,7 +161,7 @@ class TestSessionCompiler:
         """Test base_params and event params merging."""
         # Event params should override base params
         batch = SessionCompiler.compile(container.session)
-        msg = batch.messages[1]  # Second event has gain param
+        msg = batch.entries[1]  # Second event has gain param
 
         assert msg.params["sound"] == "bd"  # From base_params
         assert msg.params["orbit"] == 0  # From base_params

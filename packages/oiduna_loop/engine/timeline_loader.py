@@ -9,8 +9,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from oiduna_timeline import ScheduledChangeTimeline
-    from oiduna_scheduler.scheduler import MessageScheduler
+    from oiduna_timeline import CuedChangeTimeline
+    from oiduna_scheduler.scheduler import LoopScheduler
 
 
 class TimelineLoader:
@@ -27,8 +27,8 @@ class TimelineLoader:
     @staticmethod
     def apply_changes_at_step(
         global_step: int,
-        timeline: ScheduledChangeTimeline,
-        message_scheduler: MessageScheduler,
+        timeline: CuedChangeTimeline,
+        message_scheduler: LoopScheduler,
     ) -> bool:
         """
         Apply all scheduled changes at the given global step.
@@ -36,7 +36,7 @@ class TimelineLoader:
         This method:
         1. Gets all changes scheduled for this step
         2. Merges them into a single batch (if multiple)
-        3. Loads the merged batch into the MessageScheduler
+        3. Loads the merged batch into the LoopScheduler
         4. Performs automatic cleanup of past changes
 
         Args:

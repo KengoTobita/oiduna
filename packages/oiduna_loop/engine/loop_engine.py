@@ -51,13 +51,13 @@ from .session_loader import SessionLoader
 # New destination-based architecture imports
 from pathlib import Path
 
-from oiduna_scheduler.scheduler_models import ScheduledMessageBatch, ScheduledMessage
-from oiduna_scheduler.scheduler import MessageScheduler
+from oiduna_scheduler.scheduler_models import LoopSchedule, ScheduleEntry
+from oiduna_scheduler.scheduler import LoopScheduler
 from oiduna_scheduler.router import DestinationRouter
 from oiduna_scheduler.senders import OscDestinationSender, MidiDestinationSender
 from oiduna_models import OscDestinationConfig, MidiDestinationConfig
 from oiduna_models import load_destinations_from_file
-from oiduna_timeline import ScheduledChangeTimeline
+from oiduna_timeline import CuedChangeTimeline
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +98,7 @@ class LoopEngine:
         midi: MidiOutput,
         command_consumer: CommandConsumer,
         state_producer: StateProducer,
-        before_send_hooks: list[Callable[[list[ScheduledMessage], float, int], list[ScheduledMessage]]] | None = None,
+        before_send_hooks: list[Callable[[list[ScheduleEntry], float, int], list[ScheduleEntry]]] | None = None,
     ):
         """
         Initialize LoopEngine with injected dependencies.
@@ -158,16 +158,16 @@ class LoopEngine:
 
         # Timeline scheduling (cumulative step counter, persists across stop/start)
         self._global_step: int = 0
-        self._timeline: ScheduledChangeTimeline | None = None
+        self._timeline: CuedChangeTimeline | None = None
 
         # New destination-based architecture (Milestone 3)
-        self._message_scheduler = MessageScheduler()
+        self._loop_scheduler = LoopScheduler()
         self._destination_router = DestinationRouter()
 
         # Session loader (extracted for SRP)
         self._session_loader = SessionLoader(
             destination_router=self._destination_router,
-            message_scheduler=self._message_scheduler,
+            message_scheduler=self._loop_scheduler,
             state=self.state,
             status_update_callback=self._schedule_status_update,
         )
@@ -540,7 +540,7 @@ class LoopEngine:
         """
         return self._handle_midi_panic({})
 
-    def set_timeline(self, timeline: ScheduledChangeTimeline) -> None:
+    def set_timeline(self, timeline: CuedChangeTimeline) -> None:
         """
         Public API: Set the timeline for scheduled changes.
 
@@ -548,8 +548,8 @@ class LoopEngine:
             timeline: The ScheduledChangeTimeline instance to use for pattern changes.
 
         Example:
-            >>> from oiduna_timeline import ScheduledChangeTimeline
-            >>> timeline = ScheduledChangeTimeline()
+            >>> from oiduna_timeline import CuedChangeTimeline
+            >>> timeline = CuedChangeTimeline()
             >>> engine.set_timeline(timeline)
         """
         self._timeline = timeline
@@ -657,7 +657,7 @@ class LoopEngine:
         """
         16th note step loop with drift correction and auto-reset.
 
-        Uses ScheduledMessage architecture for event routing.
+        Uses ScheduleEntry architecture for event routing.
         Applies pending changes at appropriate timing boundaries.
 
         Drift correction (Phase 1):
@@ -725,17 +725,17 @@ class LoopEngine:
             # Wait for next step with drift correction
             await self._wait_for_next_step()
 
-    def _get_filtered_messages(self, current_step: int) -> list[ScheduledMessage]:
+    def _get_filtered_messages(self, current_step: int) -> list[ScheduleEntry]:
         """
         Get and filter messages for current step.
 
         Returns:
-            Filtered list of ScheduledMessage for current step
+            Filtered list of ScheduleEntry for current step
         """
-        if not self._session_loader.destinations_loaded or self._message_scheduler.message_count == 0:
+        if not self._session_loader.destinations_loaded or self._loop_scheduler.message_count == 0:
             return []
 
-        scheduled_messages = self._message_scheduler.get_messages_at_step(current_step)
+        scheduled_messages = self._loop_scheduler.get_messages_at_step(current_step)
         if not scheduled_messages:
             return []
 
@@ -743,8 +743,8 @@ class LoopEngine:
         return self.state.filter_messages(scheduled_messages)
 
     def _apply_hooks(
-        self, messages: list[ScheduledMessage], current_step: int
-    ) -> list[ScheduledMessage]:
+        self, messages: list[ScheduleEntry], current_step: int
+    ) -> list[ScheduleEntry]:
         """
         Apply extension hooks to messages.
 
@@ -759,7 +759,7 @@ class LoopEngine:
             messages = hook(messages, self.state.bpm, current_step)
         return messages
 
-    def _send_messages(self, messages: list[ScheduledMessage], current_step: int) -> None:
+    def _send_messages(self, messages: list[ScheduleEntry], current_step: int) -> None:
         """
         Send messages to destination router.
 
@@ -809,7 +809,7 @@ class LoopEngine:
                 TimelineLoader.apply_changes_at_step(
                     future_global_step,
                     self._timeline,
-                    self._message_scheduler,
+                    self._loop_scheduler,
                 )
 
             # Get and filter messages (already prepared by lookahead)
@@ -977,7 +977,7 @@ class LoopEngine:
 
         Note: After Phase 1-8 architecture unification, track/sequence structure
         no longer exists in RuntimeState. This method returns empty list.
-        Monitor display should be updated to work with ScheduledMessageBatch architecture.
+        Monitor display should be updated to work with LoopSchedule architecture.
         """
         # Legacy CompiledSession architecture removed - return empty list
         return []

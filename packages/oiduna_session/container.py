@@ -2,7 +2,7 @@
 
 from typing import Optional
 from oiduna_models import Session
-from .managers.base import SessionEventPublisher
+from .managers.base import SessionChangePublisher
 from .managers.client_manager import ClientManager
 from .managers.destination_manager import DestinationManager
 from .managers.environment_manager import EnvironmentManager
@@ -25,37 +25,37 @@ class SessionContainer:
         >>> pattern = container.patterns.create("t1", "p1", "main", "c1")
     """
 
-    def __init__(self, event_publisher: Optional[SessionEventPublisher] = None) -> None:
+    def __init__(self, change_publisher: Optional[SessionChangePublisher] = None) -> None:
         """
         SessionContainerの初期化.
 
         Args:
-            event_publisher: Optional session event publisher for SSE events.
-                Accepts SessionEventPublisher (new) or EventSink (legacy).
+            change_publisher: Optional session change publisher for SSE change notifications.
+                Accepts SessionChangePublisher protocol.
         """
         self.session = Session()
-        self.event_publisher = event_publisher
+        self.change_publisher = change_publisher
 
         # 各マネージャーを直接公開（委譲なし）
         # Session単位のIDGeneratorを使用
-        self.clients = ClientManager(self.session, event_publisher)
-        self.destinations = DestinationManager(self.session, event_publisher)
+        self.clients = ClientManager(self.session, change_publisher)
+        self.destinations = DestinationManager(self.session, change_publisher)
         self.tracks = TrackManager(
             self.session,
-            event_publisher,
+            change_publisher,
             id_generator=self.session._id_generator,
             destination_manager=self.destinations,
             client_manager=self.clients,
         )
         self.patterns = PatternManager(
             self.session,
-            event_publisher,
+            change_publisher,
             id_generator=self.session._id_generator,
             track_manager=self.tracks,
             client_manager=self.clients,
         )
-        self.environment = EnvironmentManager(self.session, event_publisher)
-        self.timeline = TimelineManager(self.session, event_publisher)
+        self.environment = EnvironmentManager(self.session, change_publisher)
+        self.timeline = TimelineManager(self.session, change_publisher)
 
     def reset(self) -> None:
         """セッションを空の状態にリセット（admin操作）."""
@@ -70,7 +70,7 @@ class SessionContainer:
         self.patterns.session = self.session
         self.patterns.id_generator = self.session._id_generator
         self.environment.session = self.session
-        self.timeline = TimelineManager(self.session, self.event_publisher)
+        self.timeline = TimelineManager(self.session, self.change_publisher)
 
     def get_state(self) -> Session:
         """完全なセッション状態を取得."""

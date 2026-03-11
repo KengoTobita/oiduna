@@ -50,11 +50,11 @@ class NoopCommandConsumer:
 
 
 class InProcessStateProducer:
-    """In-process state producer and session event publisher.
+    """In-process state producer and session change publisher.
 
     Implements two protocols:
     - StateProducer: Loop layer state updates (position, status, error, etc.)
-    - SessionEventPublisher: Session layer CRUD events (track_created, pattern_updated, etc.)
+    - SessionChangePublisher: Session layer CRUD change notifications (track_created, pattern_updated, etc.)
 
     Backed by an asyncio.Queue that the SSE endpoint reads from.
     Both protocol types push events into the same unified queue.
@@ -166,18 +166,18 @@ class InProcessStateProducer:
                 pass
 
     # ----------------------------------------------------------
-    # SessionEventPublisher protocol method
+    # SessionChangePublisher protocol method
     # ----------------------------------------------------------
 
-    def publish(self, event: dict[str, Any]) -> None:
+    def publish(self, change: dict[str, Any]) -> None:
         """
-        Publish a session event (SessionEventPublisher protocol).
+        Publish a session change notification (SessionChangePublisher protocol).
 
-        This method implements the SessionEventPublisher protocol,
-        allowing Session layer managers to publish CRUD events.
+        This method implements the SessionChangePublisher protocol,
+        allowing Session layer managers to publish CRUD change notifications.
 
         Args:
-            event: Event dictionary with 'type' and 'data' keys
+            change: Change dictionary with 'type' and 'data' keys
                 Example: {"type": "track_created", "data": {...}}
         """
-        self._push(event)
+        self._push(change)

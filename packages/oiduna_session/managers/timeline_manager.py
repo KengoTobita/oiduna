@@ -7,8 +7,8 @@ Handles scheduling, cancellation, and permission checks for timeline changes.
 from __future__ import annotations
 from typing import Optional
 
-from oiduna_timeline import ScheduledChange, ScheduledChangeTimeline
-from oiduna_scheduler.scheduler_models import ScheduledMessageBatch
+from oiduna_timeline import CuedChange, CuedChangeTimeline
+from oiduna_scheduler.scheduler_models import LoopSchedule
 from .base import BaseManager
 
 # Timeline lookahead configuration (from LoopEngine ADR-0020)
@@ -26,7 +26,7 @@ class TimelineManager(BaseManager):
 
     Example:
         >>> manager = TimelineManager(session, event_publisher)
-        >>> success, msg, change_id = manager.schedule_change(
+        >>> success, msg, change_id = manager.cue_change(
         ...     batch, 1000, "alice_001", "Alice", "Kick pattern", 500
         ... )
     """
@@ -35,7 +35,7 @@ class TimelineManager(BaseManager):
         self,
         session,
         event_publisher=None,
-        timeline: Optional[ScheduledChangeTimeline] = None,
+        timeline: Optional[CuedChangeTimeline] = None,
     ):
         """
         Initialize TimelineManager.
@@ -46,11 +46,11 @@ class TimelineManager(BaseManager):
             timeline: Optional timeline instance (creates new if None)
         """
         super().__init__(session, event_publisher)
-        self.timeline = timeline or ScheduledChangeTimeline()
+        self.timeline = timeline or CuedChangeTimeline()
 
-    def schedule_change(
+    def cue_change(
         self,
-        batch: ScheduledMessageBatch,
+        batch: LoopSchedule,
         target_global_step: int,
         client_id: str,
         client_name: str,
@@ -85,7 +85,7 @@ class TimelineManager(BaseManager):
             )
 
         # Create scheduled change
-        change = ScheduledChange(
+        change = CuedChange(
             target_global_step=target_global_step,
             batch=batch,
             client_id=client_id,
@@ -100,7 +100,7 @@ class TimelineManager(BaseManager):
             return False, msg, None
 
         # Emit SSE event
-        self._emit_event("change_scheduled", change.to_dict())
+        self._emit_change("change_scheduled", change.to_dict())
 
         return True, "", change.change_id
 
@@ -133,7 +133,7 @@ class TimelineManager(BaseManager):
 
         if success:
             # Emit SSE event
-            self._emit_event("change_cancelled", {
+            self._emit_change("change_cancelled", {
                 "change_id": change_id,
                 "client_id": client_id,
             })
@@ -143,7 +143,7 @@ class TimelineManager(BaseManager):
     def update_change(
         self,
         change_id: str,
-        new_batch: ScheduledMessageBatch,
+        new_batch: LoopSchedule,
         new_target_global_step: int,
         new_description: str,
         client_id: str,
@@ -173,14 +173,14 @@ class TimelineManager(BaseManager):
             return False, f"Permission denied: change {change_id} owned by {old_change.client_id}"
 
         # Create new change with same ID and client info
-        new_change = ScheduledChange(
+        new_change = CuedChange(
             change_id=change_id,
             target_global_step=new_target_global_step,
             batch=new_batch,
             client_id=old_change.client_id,  # Keep original owner
             client_name=old_change.client_name,
             description=new_description,
-            scheduled_at=old_change.scheduled_at,  # Keep original timestamp
+            cued_at=old_change.cued_at,  # Keep original timestamp
         )
 
         # Update in timeline
@@ -192,11 +192,11 @@ class TimelineManager(BaseManager):
 
         if success:
             # Emit SSE event
-            self._emit_event("change_updated", new_change.to_dict())
+            self._emit_change("change_updated", new_change.to_dict())
 
         return success, msg
 
-    def get_change(self, change_id: str) -> Optional[ScheduledChange]:
+    def get_change(self, change_id: str) -> Optional[CuedChange]:
         """
         Get a scheduled change by ID.
 
@@ -204,7 +204,7 @@ class TimelineManager(BaseManager):
             change_id: UUID of the change
 
         Returns:
-            ScheduledChange or None if not found
+            CuedChange or None if not found
         """
         return self.timeline.get_change_by_id(change_id)
 
@@ -212,7 +212,7 @@ class TimelineManager(BaseManager):
         self,
         current_global_step: int,
         limit: int = 100,
-    ) -> list[ScheduledChange]:
+    ) -> list[CuedChange]:
         """
         Get all upcoming changes.
 

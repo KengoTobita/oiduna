@@ -2,7 +2,7 @@
 
 from typing import Any, Optional
 from oiduna_models import Session, Track, IDGenerator
-from .base import BaseManager, SessionEventPublisher
+from .base import BaseManager, SessionChangePublisher
 from .client_manager import ClientManager
 from .destination_manager import DestinationManager
 
@@ -18,7 +18,7 @@ class TrackManager(BaseManager):
     def __init__(
         self,
         session: Session,
-        event_publisher: Optional[SessionEventPublisher] = None,
+        event_publisher: Optional[SessionChangePublisher] = None,
         id_generator: Optional[IDGenerator] = None,
         destination_manager: Optional[DestinationManager] = None,
         client_manager: Optional[ClientManager] = None,
@@ -97,7 +97,7 @@ class TrackManager(BaseManager):
 
     def _emit_track_created_event(self, track: Track) -> None:
         """Emit track_created event."""
-        self._emit_event("track_created", {
+        self._emit_change("track_created", {
             "track_id": track.track_id,
             "track_name": track.track_name,
             "client_id": track.client_id,
@@ -116,7 +116,7 @@ class TrackManager(BaseManager):
         """
         return self.session.tracks.get(track_id)
 
-    def list(self) -> list[Track]:
+    def list_tracks(self) -> list[Track]:
         """
         List all tracks.
 
@@ -147,7 +147,7 @@ class TrackManager(BaseManager):
         track.base_params.update(base_params)
 
         # Emit event
-        self._emit_event("track_updated", {
+        self._emit_change("track_updated", {
             "track_id": track_id,
             "client_id": track.client_id,
             "updated_params": base_params,
@@ -176,7 +176,7 @@ class TrackManager(BaseManager):
             del self.session.tracks[track_id]
 
             # Emit event
-            self._emit_event("track_deleted", {
+            self._emit_change("track_deleted", {
                 "track_id": track_id,
                 "client_id": track.client_id,
                 "patterns_deleted": pattern_count,

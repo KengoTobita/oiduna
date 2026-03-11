@@ -1,77 +1,80 @@
 """
-Message scheduler - routes messages by timing (step).
+Loop scheduler - executes loop schedule step-by-step.
 
-Replaces StepProcessor's timing logic with generic message scheduling.
+Routes schedule entries to destinations based on timing (step).
 """
 
 from __future__ import annotations
 from collections import defaultdict
 
-from oiduna_scheduler.scheduler_models import ScheduledMessage, ScheduledMessageBatch
+from oiduna_scheduler.scheduler_models import ScheduleEntry, LoopSchedule
 
 
-class MessageScheduler:
+class LoopScheduler:
     """
-    Schedule messages by step for playback.
+    Executes loop schedule step-by-step.
+
+    Like a conductor following a musical score - reads the schedule
+    and sends entries to destinations at the right step.
 
     Design:
     - Lightweight: just dict lookups by step
-    - No domain knowledge: treats all messages equally
-    - Thread-safe for reads (immutable messages)
+    - No domain knowledge: treats all entries equally
+    - Thread-safe for reads (immutable entries)
 
     Usage:
-        >>> scheduler = MessageScheduler()
-        >>> batch = ScheduledMessageBatch(...)
-        >>> scheduler.load_messages(batch)
-        >>> messages = scheduler.get_messages_at_step(0)
-        >>> router.send_messages(messages)
+        >>> scheduler = LoopScheduler()
+        >>> schedule = LoopSchedule(...)
+        >>> scheduler.load_schedule(schedule)
+        >>> entries = scheduler.get_entries_at_step(0)
+        >>> router.send_entries(entries)
     """
 
     def __init__(self) -> None:
         """Initialize empty scheduler."""
-        # Map: step -> list of messages
-        self._messages_by_step: Dict[int, List[ScheduledMessage]] = defaultdict(list)
+        # Map: step -> list of entries
+        self._entries_by_step: dict[int, list[ScheduleEntry]] = defaultdict(list)
         self._bpm: float = 120.0
         self._pattern_length: float = 4.0
 
-    def load_messages(self, batch: ScheduledMessageBatch) -> None:
+    def load_schedule(self, schedule: LoopSchedule) -> None:
         """
-        Load a batch of messages into the scheduler.
+        Load a loop schedule into the scheduler.
 
         Args:
-            batch: Batch of scheduled messages from MARS
+            schedule: Loop schedule from MARS
 
-        This replaces any previously loaded messages.
+        This replaces any previously loaded schedule.
         """
-        # Clear existing messages
-        self._messages_by_step.clear()
+        # Clear existing entries
+        self._entries_by_step.clear()
 
         # Store metadata
-        self._bpm = batch.bpm
-        self._pattern_length = batch.pattern_length
+        self._bpm = schedule.bpm
+        self._pattern_length = schedule.pattern_length
 
-        # Index messages by step
-        for msg in batch.messages:
-            self._messages_by_step[msg.step].append(msg)
+        # Index entries by step
+        for entry in schedule.entries:
+            self._entries_by_step[entry.step].append(entry)
 
-    def get_messages_at_step(self, step: int) -> List[ScheduledMessage]:
+    def get_entries_at_step(self, step: int) -> list[ScheduleEntry]:
         """
-        Get all messages scheduled for a given step.
+        Get all entries scheduled for a given step.
 
         Args:
             step: Step number (0-255)
 
         Returns:
-            List of messages (may be empty)
+            List of entries (may be empty)
 
         Note: Returns list reference for performance.
               Caller should not modify the list.
         """
-        return self._messages_by_step.get(step, [])
+        return self._entries_by_step.get(step, [])
 
     def clear(self) -> None:
-        """Clear all scheduled messages."""
-        self._messages_by_step.clear()
+        """Clear the loaded schedule."""
+        self._entries_by_step.clear()
 
     @property
     def bpm(self) -> float:
@@ -84,11 +87,11 @@ class MessageScheduler:
         return self._pattern_length
 
     @property
-    def message_count(self) -> int:
-        """Total number of scheduled messages."""
-        return sum(len(msgs) for msgs in self._messages_by_step.values())
+    def entry_count(self) -> int:
+        """Total number of schedule entries."""
+        return sum(len(entries) for entries in self._entries_by_step.values())
 
     @property
     def occupied_steps(self) -> set[int]:
-        """Set of steps that have messages."""
-        return set(self._messages_by_step.keys())
+        """Set of steps that have entries."""
+        return set(self._entries_by_step.keys())

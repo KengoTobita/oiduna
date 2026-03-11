@@ -15,16 +15,16 @@ from collections.abc import Callable
 from ..result import CommandResult
 
 try:
-    from oiduna_scheduler.scheduler_models import ScheduledMessageBatch
-    from oiduna_scheduler.scheduler import MessageScheduler
+    from oiduna_scheduler.scheduler_models import LoopSchedule
+    from oiduna_scheduler.scheduler import LoopScheduler
     from oiduna_scheduler.router import DestinationRouter
     from oiduna_scheduler.senders import OscDestinationSender, MidiDestinationSender
     from oiduna_models import OscDestinationConfig, MidiDestinationConfig
     from oiduna_models import load_destinations_from_file
 except ImportError:
     # Fallback for local development
-    from oiduna_scheduler.scheduler_models import ScheduledMessageBatch
-    from oiduna_scheduler.scheduler import MessageScheduler
+    from oiduna_scheduler.scheduler_models import LoopSchedule
+    from oiduna_scheduler.scheduler import LoopScheduler
     from oiduna_scheduler.router import DestinationRouter
     from oiduna_scheduler.senders import OscDestinationSender, MidiDestinationSender
     from oiduna_models import OscDestinationConfig, MidiDestinationConfig
@@ -43,7 +43,7 @@ class SessionLoader:
     - Load destination configurations from YAML
     - Register destination senders with router
     - Validate and load session data
-    - Coordinate with MessageScheduler and RuntimeState
+    - Coordinate with LoopScheduler and RuntimeState
 
     Extracted from LoopEngine to improve code organization and testability.
     """
@@ -51,7 +51,7 @@ class SessionLoader:
     def __init__(
         self,
         destination_router: DestinationRouter,
-        message_scheduler: MessageScheduler,
+        message_scheduler: LoopScheduler,
         state: RuntimeState,
         status_update_callback: Callable[[], None],
     ):
@@ -152,7 +152,7 @@ class SessionLoader:
         """
         Load session using new destination-based API.
 
-        Accepts ScheduledMessageBatch format with generic messages
+        Accepts LoopSchedule format with generic messages
         that route to configured destinations.
 
         Args:
@@ -174,7 +174,7 @@ class SessionLoader:
 
         # Parse and validate the batch
         try:
-            batch = ScheduledMessageBatch.from_dict(payload)
+            batch = LoopSchedule.from_dict(payload)
         except Exception as e:
             return CommandResult.error(f"Invalid session payload: {e}")
 

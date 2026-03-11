@@ -5,7 +5,7 @@ A PatternEvent represents a single musical event at a specific timing position.
 PatternEvents are immutable once created.
 
 Note: Previously named "Event" - renamed to PatternEvent in v3.1 to distinguish
-from SessionEvent (CRUD operations) and SSE Event (HTTP streaming).
+from SessionChange (CRUD change notifications) and SSE Event (HTTP streaming).
 """
 
 from typing import Any
@@ -16,7 +16,7 @@ class PatternEvent(BaseModel):
     """
     A single scheduled musical event within a pattern.
 
-    PatternEvents are combined with Track.base_params to generate ScheduledMessages.
+    PatternEvents are combined with Track.base_params to generate ScheduleEntries.
     They define precise timing (step, cycle) and sound parameters.
 
     Example:

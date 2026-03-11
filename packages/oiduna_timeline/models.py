@@ -13,11 +13,11 @@ from typing import Any
 import uuid
 import time
 
-from oiduna_scheduler.scheduler_models import ScheduledMessageBatch
+from oiduna_scheduler.scheduler_models import LoopSchedule
 
 
 @dataclass(frozen=True)
-class ScheduledChange:
+class CuedChange:
     """
     A single scheduled change in the timeline.
 
@@ -25,10 +25,10 @@ class ScheduledChange:
     Multiple changes can be scheduled for the same step and will be merged.
 
     Example:
-        >>> from oiduna_scheduler.scheduler_models import ScheduledMessage, ScheduledMessageBatch
-        >>> msg = ScheduledMessage("superdirt", 0.0, 0, {"s": "bd"})
-        >>> batch = ScheduledMessageBatch(messages=(msg,), bpm=140.0)
-        >>> change = ScheduledChange(
+        >>> from oiduna_scheduler.scheduler_models import ScheduleEntry, LoopSchedule
+        >>> msg = ScheduleEntry("superdirt", 0.0, 0, {"s": "bd"})
+        >>> batch = LoopSchedule(messages=(msg,), bpm=140.0)
+        >>> change = CuedChange(
         ...     target_global_step=1000,
         ...     batch=batch,
         ...     client_id="alice_001",
@@ -40,12 +40,12 @@ class ScheduledChange:
     """
 
     target_global_step: int  # When to apply this change (cumulative step count)
-    batch: ScheduledMessageBatch  # Messages to apply
+    batch: LoopSchedule  # Messages to apply
     client_id: str  # Who scheduled this change
     change_id: str = field(default_factory=lambda: str(uuid.uuid4()))  # Unique identifier
     client_name: str = ""  # Human-readable client name (for UI)
     description: str = ""  # User-provided description (for collaboration)
-    scheduled_at: float = field(default_factory=time.time)  # Unix timestamp of scheduling
+    cued_at: float = field(default_factory=time.time)  # Unix timestamp of scheduling
     sequence_number: int = 0  # Order within the same step (for merge order visualization)
 
     def __post_init__(self) -> None:
@@ -70,13 +70,13 @@ class ScheduledChange:
             "client_id": self.client_id,
             "client_name": self.client_name,
             "description": self.description,
-            "scheduled_at": self.scheduled_at,
+            "cued_at": self.cued_at,
             "sequence_number": self.sequence_number,
             "batch": self.batch.to_dict(),
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> ScheduledChange:
+    def from_dict(cls, data: dict[str, Any]) -> CuedChange:
         """
         Create from dictionary (for deserialization).
 
@@ -84,15 +84,15 @@ class ScheduledChange:
             data: Dictionary containing all required fields.
 
         Returns:
-            ScheduledChange instance.
+            CuedChange instance.
         """
         return cls(
             change_id=data["change_id"],
             target_global_step=data["target_global_step"],
-            batch=ScheduledMessageBatch.from_dict(data["batch"]),
+            batch=LoopSchedule.from_dict(data["batch"]),
             client_id=data["client_id"],
             client_name=data.get("client_name", ""),
             description=data.get("description", ""),
-            scheduled_at=data.get("scheduled_at", time.time()),
+            cued_at=data.get("cued_at", time.time()),
             sequence_number=data.get("sequence_number", 0),
         )

@@ -65,7 +65,7 @@ class TestClientCRUD:
     def test_list_clients(self, container_with_client):
         """Test listing clients."""
         container_with_client.clients.create("client_002", "Bob")
-        clients = container_with_client.clients.list()
+        clients = container_with_client.clients.list_clients()
         assert len(clients) == 2
         assert {c.client_id for c in clients} == {"client_001", "client_002"}
 

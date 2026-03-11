@@ -1,5 +1,5 @@
 """
-Unit tests for SSE event emission from SessionManager.
+Unit tests for SSE change notification emission from SessionContainer.
 """
 
 import pytest
@@ -8,38 +8,38 @@ from oiduna_models import PatternEvent
 from oiduna_models import OscDestinationConfig
 
 
-class MockSessionEventPublisher:
+class MockSessionChangePublisher:
     """
-    Mock session event publisher for testing.
+    Mock session change publisher for testing.
 
-    Implements SessionEventPublisher protocol for testing event emission.
+    Implements SessionChangePublisher protocol for testing change notification emission.
     """
 
     def __init__(self):
-        self.events = []
+        self.changes = []
 
-    def publish(self, event: dict) -> None:
-        """Publish and record events (SessionEventPublisher protocol)."""
-        self.events.append(event)
+    def publish(self, change: dict) -> None:
+        """Publish and record change notifications (SessionChangePublisher protocol)."""
+        self.changes.append(change)
 
     def clear(self):
-        """Clear recorded events."""
-        self.events = []
+        """Clear recorded change notifications."""
+        self.changes = []
 
-    def get_events_by_type(self, event_type: str) -> list:
-        """Get all events of a specific type."""
-        return [e for e in self.events if e["type"] == event_type]
+    def get_changes_by_type(self, change_type: str) -> list:
+        """Get all change notifications of a specific type."""
+        return [c for c in self.changes if c["type"] == change_type]
 
 
 # Legacy alias for backward compatibility
-MockEventSink = MockSessionEventPublisher
+MockEventSink = MockSessionChangePublisher
 
 
 @pytest.fixture
 def manager_with_sink():
-    """Create container with mock session event publisher."""
-    sink = MockSessionEventPublisher()
-    container = SessionContainer(event_publisher=sink)
+    """Create container with mock session change publisher."""
+    sink = MockSessionChangePublisher()
+    container = SessionContainer(change_publisher=sink)
 
     # Add destination
     dest = OscDestinationConfig(
@@ -63,11 +63,11 @@ class TestClientEvents:
 
         container.clients.create("client_001", "Alice", "mars")
 
-        events = sink.get_events_by_type("client_connected")
-        assert len(events) == 1
-        assert events[0]["data"]["client_id"] == "client_001"
-        assert events[0]["data"]["client_name"] == "Alice"
-        assert events[0]["data"]["distribution"] == "mars"
+        changes = sink.get_changes_by_type("client_connected")
+        assert len(changes) == 1
+        assert changes[0]["data"]["client_id"] == "client_001"
+        assert changes[0]["data"]["client_name"] == "Alice"
+        assert changes[0]["data"]["distribution"] == "mars"
 
     def test_client_disconnected_event(self, manager_with_sink):
         """Test client_disconnected event is emitted."""
@@ -78,9 +78,9 @@ class TestClientEvents:
 
         container.clients.delete("client_001")
 
-        events = sink.get_events_by_type("client_disconnected")
-        assert len(events) == 1
-        assert events[0]["data"]["client_id"] == "client_001"
+        changes = sink.get_changes_by_type("client_disconnected")
+        assert len(changes) == 1
+        assert changes[0]["data"]["client_id"] == "client_001"
 
 
 class TestTrackEvents:
@@ -104,15 +104,15 @@ class TestTrackEvents:
             client_id="client_001"
         )
 
-        events = sink.get_events_by_type("track_created")
-        assert len(events) == 1
-        assert events[0]["data"]["track_id"] == track.track_id
+        changes = sink.get_changes_by_type("track_created")
+        assert len(changes) == 1
+        assert changes[0]["data"]["track_id"] == track.track_id
         # Validate hex format (4-digit, session-scoped)
-        assert len(events[0]["data"]["track_id"]) == 4
-        assert all(c in "0123456789abcdef" for c in events[0]["data"]["track_id"])
-        assert events[0]["data"]["track_name"] == "kick"
-        assert events[0]["data"]["client_id"] == "client_001"
-        assert events[0]["data"]["destination_id"] == "superdirt"
+        assert len(changes[0]["data"]["track_id"]) == 4
+        assert all(c in "0123456789abcdef" for c in changes[0]["data"]["track_id"])
+        assert changes[0]["data"]["track_name"] == "kick"
+        assert changes[0]["data"]["client_id"] == "client_001"
+        assert changes[0]["data"]["destination_id"] == "superdirt"
 
     def test_track_updated_event(self, container_with_client):
         """Test track_updated event is emitted."""
@@ -127,10 +127,10 @@ class TestTrackEvents:
 
         container.tracks.update_base_params(track.track_id, {"gain": 0.8})
 
-        events = sink.get_events_by_type("track_updated")
-        assert len(events) == 1
-        assert events[0]["data"]["track_id"] == track.track_id
-        assert events[0]["data"]["updated_params"] == {"gain": 0.8}
+        changes = sink.get_changes_by_type("track_updated")
+        assert len(changes) == 1
+        assert changes[0]["data"]["track_id"] == track.track_id
+        assert changes[0]["data"]["updated_params"] == {"gain": 0.8}
 
     def test_track_deleted_event(self, container_with_client):
         """Test track_deleted event is emitted."""
@@ -145,9 +145,9 @@ class TestTrackEvents:
 
         container.tracks.delete(track.track_id)
 
-        events = sink.get_events_by_type("track_deleted")
-        assert len(events) == 1
-        assert events[0]["data"]["track_id"] == track.track_id
+        changes = sink.get_changes_by_type("track_deleted")
+        assert len(changes) == 1
+        assert changes[0]["data"]["track_id"] == track.track_id
 
 
 class TestPatternEvents:
@@ -180,15 +180,15 @@ class TestPatternEvents:
             events=[PatternEvent(step=0, cycle=0.0, params={})]
         )
 
-        events = sink.get_events_by_type("pattern_created")
-        assert len(events) == 1
-        assert events[0]["data"]["track_id"] == track.track_id
-        assert events[0]["data"]["pattern_id"] == pattern.pattern_id
+        changes = sink.get_changes_by_type("pattern_created")
+        assert len(changes) == 1
+        assert changes[0]["data"]["track_id"] == track.track_id
+        assert changes[0]["data"]["pattern_id"] == pattern.pattern_id
         # Validate hex format (4-digit, session-scoped)
-        assert len(events[0]["data"]["pattern_id"]) == 4
-        assert all(c in "0123456789abcdef" for c in events[0]["data"]["pattern_id"])
-        assert events[0]["data"]["pattern_name"] == "main"
-        assert events[0]["data"]["event_count"] == 1
+        assert len(changes[0]["data"]["pattern_id"]) == 4
+        assert all(c in "0123456789abcdef" for c in changes[0]["data"]["pattern_id"])
+        assert changes[0]["data"]["pattern_name"] == "main"
+        assert changes[0]["data"]["event_count"] == 1
 
     def test_pattern_updated_event(self, container_with_track):
         """Test pattern_updated event is emitted."""
@@ -204,10 +204,10 @@ class TestPatternEvents:
 
         container.patterns.update(pattern.pattern_id, active=False)
 
-        events = sink.get_events_by_type("pattern_updated")
-        assert len(events) == 1
-        assert events[0]["data"]["pattern_id"] == pattern.pattern_id
-        assert events[0]["data"]["active"] is False
+        changes = sink.get_changes_by_type("pattern_updated")
+        assert len(changes) == 1
+        assert changes[0]["data"]["pattern_id"] == pattern.pattern_id
+        assert changes[0]["data"]["active"] is False
 
     def test_pattern_archived_event(self, container_with_track):
         """Test pattern_archived event is emitted."""
@@ -223,9 +223,9 @@ class TestPatternEvents:
 
         container.patterns.delete(pattern.pattern_id)
 
-        events = sink.get_events_by_type("pattern_archived")
-        assert len(events) == 1
-        assert events[0]["data"]["pattern_id"] == pattern.pattern_id
+        changes = sink.get_changes_by_type("pattern_archived")
+        assert len(changes) == 1
+        assert changes[0]["data"]["pattern_id"] == pattern.pattern_id
 
 
 class TestEnvironmentEvents:
@@ -237,10 +237,10 @@ class TestEnvironmentEvents:
 
         container.environment.update(bpm=140.0, metadata={"key": "Am"})
 
-        events = sink.get_events_by_type("environment_updated")
-        assert len(events) == 1
-        assert events[0]["data"]["bpm"] == 140.0
-        assert events[0]["data"]["metadata"] == {"key": "Am"}
+        changes = sink.get_changes_by_type("environment_updated")
+        assert len(changes) == 1
+        assert changes[0]["data"]["bpm"] == 140.0
+        assert changes[0]["data"]["metadata"] == {"key": "Am"}
 
 
 class TestEventSinkOptional:
@@ -248,7 +248,7 @@ class TestEventSinkOptional:
 
     def test_operations_without_sink(self):
         """Test all operations work when event_publisher is None."""
-        container = SessionContainer(event_publisher=None)
+        container = SessionContainer(change_publisher=None)
 
         # Add destination
         dest = OscDestinationConfig(

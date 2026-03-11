@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 from typing import Optional
-from oiduna_models import Session, Pattern, PatternEvent, IDGenerator
-from .base import BaseManager, SessionEventPublisher
+from oiduna_models import Session, Track, Pattern, PatternEvent, IDGenerator
+from .base import BaseManager, SessionChangePublisher
 from .track_manager import TrackManager
 from .client_manager import ClientManager
 
@@ -20,7 +20,7 @@ class PatternManager(BaseManager):
     def __init__(
         self,
         session: Session,
-        event_publisher: Optional[SessionEventPublisher] = None,
+        event_publisher: Optional[SessionChangePublisher] = None,
         id_generator: Optional[IDGenerator] = None,
         track_manager: Optional[TrackManager] = None,
         client_manager: Optional[ClientManager] = None,
@@ -108,7 +108,7 @@ class PatternManager(BaseManager):
 
     def _emit_pattern_created_event(self, pattern: Pattern) -> None:
         """Emit pattern_created event."""
-        self._emit_event("pattern_created", {
+        self._emit_change("pattern_created", {
             "track_id": pattern.track_id,
             "pattern_id": pattern.pattern_id,
             "pattern_name": pattern.pattern_name,
@@ -155,7 +155,7 @@ class PatternManager(BaseManager):
                 return track.patterns[pattern_id]
         return None
 
-    def list(self, track_id: str, include_archived: bool = False) -> Optional[list[Pattern]]:
+    def list_patterns(self, track_id: str, include_archived: bool = False) -> Optional[list[Pattern]]:
         """
         List patterns in a track (hierarchical API).
 
@@ -237,7 +237,7 @@ class PatternManager(BaseManager):
             pattern.events = events
 
         # Emit event
-        self._emit_event("pattern_updated", {
+        self._emit_change("pattern_updated", {
             "pattern_id": pattern_id,
             "track_id": pattern.track_id,
             "client_id": pattern.client_id,
@@ -268,7 +268,7 @@ class PatternManager(BaseManager):
         pattern.archived = True
 
         # Emit event
-        self._emit_event("pattern_archived", {
+        self._emit_change("pattern_archived", {
             "pattern_id": pattern_id,
             "track_id": pattern.track_id,
             "client_id": pattern.client_id,
@@ -312,7 +312,7 @@ class PatternManager(BaseManager):
         new_track.patterns[pattern_id] = old_pattern
 
         # Emit event
-        self._emit_event("pattern_moved", {
+        self._emit_change("pattern_moved", {
             "pattern_id": pattern_id,
             "from_track_id": old_track_id,
             "to_track_id": new_track_id,

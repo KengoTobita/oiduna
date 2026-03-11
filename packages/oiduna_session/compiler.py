@@ -1,5 +1,5 @@
 """
-SessionCompiler - compile Session to ScheduledMessageBatch.
+SessionCompiler - compile Session to LoopSchedule.
 
 Extracts active patterns, merges parameters, and generates
 the message batch for the Loop Engine.
@@ -8,7 +8,7 @@ the message batch for the Loop Engine.
 from typing import TYPE_CHECKING
 
 from oiduna_models import Session
-from oiduna_scheduler.scheduler_models import ScheduledMessage, ScheduledMessageBatch
+from oiduna_scheduler.scheduler_models import ScheduleEntry, LoopSchedule
 
 if TYPE_CHECKING:
     from oiduna_models import Track, PatternEvent
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 class SessionCompiler:
     """
-    Compile Session state to ScheduledMessageBatch for Loop Engine.
+    Compile Session state to LoopSchedule for Loop Engine.
 
     The compiler:
     1. Iterates through all tracks
@@ -24,8 +24,8 @@ class SessionCompiler:
     3. For each event in active patterns:
        - Merges Track.base_params with Event.params
        - Adds track_id for mute/solo filtering
-       - Creates ScheduledMessage
-    4. Returns ScheduledMessageBatch with all messages
+       - Creates ScheduleEntry
+    4. Returns LoopSchedule with all messages
 
     Example:
         >>> from oiduna_models import Session
@@ -39,9 +39,9 @@ class SessionCompiler:
     @staticmethod
     def _create_message_from_event(
         track: "Track", event: "PatternEvent"
-    ) -> ScheduledMessage:
+    ) -> ScheduleEntry:
         """
-        Create a ScheduledMessage from a Track and Event.
+        Create a ScheduleEntry from a Track and Event.
 
         Merges Track.base_params with Event.params (event params override),
         adds track_id for mute/solo filtering.
@@ -51,7 +51,7 @@ class SessionCompiler:
             event: Event to convert to message
 
         Returns:
-            ScheduledMessage ready for Loop Engine
+            ScheduleEntry ready for Loop Engine
         """
         # Merge base_params with event params (event params override)
         params = {**track.base_params, **event.params}
@@ -60,7 +60,7 @@ class SessionCompiler:
         params["track_id"] = track.track_id
 
         # Create scheduled message
-        return ScheduledMessage(
+        return ScheduleEntry(
             destination_id=track.destination_id,
             cycle=event.cycle,
             step=event.step,
@@ -68,15 +68,15 @@ class SessionCompiler:
         )
 
     @staticmethod
-    def compile(session: Session) -> ScheduledMessageBatch:
+    def compile(session: Session) -> LoopSchedule:
         """
-        Compile Session to ScheduledMessageBatch.
+        Compile Session to LoopSchedule.
 
         Args:
             session: Session state to compile
 
         Returns:
-            ScheduledMessageBatch ready for Loop Engine
+            LoopSchedule ready for Loop Engine
 
         Raises:
             ValueError: If any track references non-existent destination
@@ -121,15 +121,15 @@ class SessionCompiler:
                 f"Available destinations: {available}"
             )
 
-        return ScheduledMessageBatch(
-            messages=tuple(messages),
+        return LoopSchedule(
+            entries=tuple(messages),
             bpm=session.environment.bpm,
             pattern_length=4.0,  # Fixed (not used by 256-step engine)
-            # destinations auto-inferred from messages (property)
+            # destinations auto-inferred from entries (property)
         )
 
     @staticmethod
-    def compile_track(session: Session, track_id: str) -> list[ScheduledMessage]:
+    def compile_track(session: Session, track_id: str) -> list[ScheduleEntry]:
         """
         Compile a single track (for partial updates).
 
@@ -138,7 +138,7 @@ class SessionCompiler:
             track_id: Track to compile
 
         Returns:
-            List of ScheduledMessages for this track
+            List of ScheduleEntrys for this track
 
         Raises:
             KeyError: If track_id not found

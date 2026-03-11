@@ -1,7 +1,8 @@
 # Oiduna用語集
 
-**バージョン**: 2.0.0 (ScheduledMessageBatch統合版)
+**バージョン**: 3.0.0 (Schedule/Cued統合版)
 **作成日**: 2026-02-27
+**最終更新**: 2026-03-11
 
 ## クイックリファレンス
 
@@ -9,9 +10,11 @@
 
 | 用語 | 英語 | 説明 |
 |------|------|------|
-| ScheduledMessageBatch | Scheduled Message Batch | パターン全体を表現するデータ構造 |
-| ScheduledMessage | Scheduled Message | 単一の送信イベント |
-| MessageScheduler | Message Scheduler | ステップ別インデックス化 |
+| LoopSchedule | Loop Schedule | 256ステップのループ実行時刻表（不変） |
+| ScheduleEntry | Schedule Entry | 時刻表の1エントリ（step + destination + params） |
+| LoopScheduler | Loop Scheduler | 時刻表を実行するエンジン |
+| CuedChange | Cued Change | 将来のstepで実行する変更予約（DJ的なcue） |
+| CuedChangeTimeline | Cued Change Timeline | 予約されたchangeの管理 |
 | DestinationRouter | Destination Router | 送信先別振り分け |
 | RuntimeState | Runtime State | 再生状態管理 |
 
@@ -73,21 +76,21 @@ hihat = PatternEvent(step=64, cycle=1.0, params={"sound": "hh", "gain": 0.6})
 
 ---
 
-#### 2️⃣ SessionEvent（CRUD操作イベント）
+#### 2️⃣ SessionChange（CRUD変更通知）
 
-**定義**: Session層のデータ変更を通知するイベント（辞書型）
+**定義**: Session層のデータ変更を通知する変更通知（辞書型）
 
 **レイヤー**: Session層（oiduna_session）
 
 **データ型**:
 ```python
 {
-    "type": str,     # イベント種別（例: "track_created"）
-    "data": dict     # イベント固有データ
+    "type": str,     # 変更種別（例: "track_created"）
+    "data": dict     # 変更固有データ
 }
 ```
 
-**イベント種類** (29種):
+**変更種類** (29種):
 - Client: `client_connected`, `client_disconnected`
 - Track: `track_created`, `track_updated`, `track_deleted`
 - Pattern: `pattern_created`, `pattern_updated`, `pattern_archived`, `pattern_moved`
@@ -95,10 +98,10 @@ hihat = PatternEvent(step=64, cycle=1.0, params={"sound": "hh", "gain": 0.6})
 - Destination: `destination_removed`
 - Timeline: `change_scheduled`, `change_cancelled`
 
-**Protocol**: `SessionEventPublisher.publish(event: dict)`
+**Protocol**: `SessionChangePublisher.publish(change: dict)`
 
 **使用箇所**:
-- `BaseManager._emit_event()` - 各Managerから発火
+- `BaseManager._emit_change()` - 各Managerから発火
 - `InProcessStateProducer.publish()` - SSE配信用キューに蓄積
 
 **例**:
@@ -116,6 +119,8 @@ hihat = PatternEvent(step=64, cycle=1.0, params={"sound": "hh", "gain": 0.6})
 ```
 
 **頻度**: 低頻度（ユーザー操作時のみ）
+
+**Note**: v3.1以前は「SessionEvent」と呼ばれていましたが、PatternEventとの混同を防ぐためv3.2で「SessionChange」にリネームされました。
 
 ---
 
@@ -137,7 +142,7 @@ data: {json_data}
 - `_sse_event()` - SSE形式への変換関数
 - ブラウザの `EventSource` APIで受信
 
-**統合配信**: SessionEvent と StateProducer の両方を統合配信
+**統合配信**: SessionChange と StateProducer の両方を統合配信
 
 **例**:
 ```
@@ -151,17 +156,17 @@ event: heartbeat
 data: {"timestamp": 1234567890.123}
 ```
 
-**頻度**: 高頻度（SessionEvent + StateProducer の統合）
+**頻度**: 高頻度（SessionChange + StateProducer の統合）
 
 ---
 
 #### Event用語の比較表
 
-| 項目 | PatternEvent | SessionEvent | SSE Event |
-|------|-------------|--------------|-----------|
+| 項目 | PatternEvent | SessionChange | SSE Event |
+|------|-------------|---------------|-----------|
 | **レイヤー** | ドメインモデル | Session層 | HTTP層 |
 | **データ型** | PatternEvent class | dict | string |
-| **目的** | 音楽的タイミング | CRUD通知 | HTTP配信 |
+| **目的** | 音楽的タイミング | CRUD変更通知 | HTTP配信 |
 | **頻度** | 多数（パターン内） | 低頻度（操作時） | 高頻度（統合） |
 | **送信先** | SessionCompiler | SSE endpoint | ブラウザ |
 | **例** | `PatternEvent(step=0, ...)` | `{"type": "track_created"}` | `"event: ...\ndata: ...\n\n"` |
@@ -173,15 +178,15 @@ data: {"timestamp": 1234567890.123}
 │ ドメイン層: PatternEvent（音楽イベント）              │
 │   Pattern.events: list[PatternEvent]                │
 │       ↓ SessionCompiler                             │
-│   ScheduledMessageBatch                             │
-│       ↓ Loop Engine                                 │
+│   LoopSchedule (256ステップ実行時刻表)               │
+│       ↓ LoopScheduler                               │
 │   音楽再生                                           │
 └─────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────┐
-│ Session層: SessionEvent（CRUD通知）                  │
-│   BaseManager._emit_event()                         │
-│       ↓ SessionEventPublisher.publish()             │
+│ Session層: SessionChange（CRUD変更通知）             │
+│   BaseManager._emit_change()                        │
+│       ↓ SessionChangePublisher.publish()            │
 │   InProcessStateProducer._queue ←┐                      │
 └──────────────────────────────┼──────────────────────┘
                                │
@@ -205,35 +210,210 @@ data: {"timestamp": 1234567890.123}
 
 - **v3.0以前**: 全て「Event」と呼ばれ、混乱の原因
 - **v3.1**: PatternEvent に改名、SessionEventPublisher Protocol導入
-- SessionEvent は Protocol名（SessionEventPublisher）で区別
+- **v3.2**: SessionEvent → SessionChange にリネーム（PatternEventとの明確な区別）
+- SessionChangePublisher Protocol: SessionChange変更通知の配信インターフェース
 - SSE Event は HTTP仕様の用語として明示
 
 ---
 
-### パターンデータ
+### Schedule/Cued用語（重要）
 
-| 用語 | 型 | 説明 |
-|------|---|------|
-| ScheduledMessageBatch | dataclass | パターン全体（messages + bpm + pattern_length） |
-| ScheduledMessage | dataclass | 単一イベント（destination_id + cycle + step + params） |
-| params | dict[str, Any] | 送信先依存のパラメータ |
+Oidunaでは「Schedule」という用語が**2つの異なる意味**で使用されていました（v3.0まで）。
+v3.1以降、明確に分離されました。
 
-**ScheduledMessageBatchの構造**:
+#### 4️⃣ LoopSchedule（ループ実行時刻表）
+
+**定義**: 256ステップの確定済み実行計画（不変）
+
+**レイヤー**: Scheduler層（oiduna_scheduler）
+
+**データ型**:
 ```python
-ScheduledMessageBatch
-├── messages: tuple[ScheduledMessage, ...]
-├── bpm: float (デフォルト: 120.0)
-└── pattern_length: float (デフォルト: 4.0サイクル)
+LoopSchedule(
+    entries: tuple[ScheduleEntry, ...],  # 全エントリ
+    bpm: float,                          # テンポ
+    pattern_length: float                # パターン長（サイクル）
+)
 ```
 
-**ScheduledMessageの構造**:
+**使用箇所**:
+- `SessionCompiler.compile()` - Sessionからコンパイル
+- `LoopScheduler.load_schedule()` - ループエンジンにロード
+- `CuedChange.batch` - Timeline予約の実行内容
+
+**例**:
 ```python
-ScheduledMessage
-├── destination_id: str (例: "superdirt", "volca_bass")
-├── cycle: float (サイクル位置: 0.0-4.0)
-├── step: int (ステップ番号: 0-255)
-└── params: dict[str, Any] (送信先依存)
+# Sessionをコンパイル
+schedule = compiler.compile(session)
+# → LoopSchedule(entries=(...), bpm=120.0)
+
+# Schedulerにロード
+scheduler = LoopScheduler()
+scheduler.load_schedule(schedule)
+
+# ステップごとに実行
+entries = scheduler.get_entries_at_step(64)
 ```
+
+**意味**: 列車の時刻表のような**確定済みプラン**
+- 一度作ったら変わらない（frozen=True）
+- 256ステップすべての実行内容が記載
+- LoopSchedulerがこれを読んで実行
+
+**頻度**: 低頻度（Session変更時のみコンパイル）
+
+---
+
+#### 5️⃣ ScheduleEntry（時刻表エントリ）
+
+**定義**: LoopScheduleの1エントリ（step + destination + params）
+
+**データ型**:
+```python
+ScheduleEntry(
+    destination_id: str,     # 送信先ID
+    cycle: float,            # サイクル位置 (0.0-4.0)
+    step: int,               # ステップ番号 (0-255)
+    params: dict[str, Any]   # 送信先依存パラメータ
+)
+```
+
+**使用箇所**:
+- `LoopSchedule.entries` - 時刻表の全エントリ
+- `LoopScheduler.get_entries_at_step()` - 特定ステップのエントリ取得
+
+**例**:
+```python
+# キックドラムエントリ
+kick = ScheduleEntry(
+    destination_id="superdirt",
+    cycle=0.0,
+    step=0,
+    params={"s": "bd", "gain": 0.9}
+)
+```
+
+**意味**: 時刻表の1行（「step 0でsuperdirtにbdを送信」）
+
+---
+
+#### 6️⃣ CuedChange（キューされた変更）
+
+**定義**: 将来のglobal_stepで実行する変更予約
+
+**レイヤー**: Timeline層（oiduna_timeline）
+
+**データ型**:
+```python
+CuedChange(
+    target_global_step: int,  # 実行予定step（累積カウンタ）
+    batch: LoopSchedule,      # 実行内容
+    client_id: str,           # 予約したクライアント
+    change_id: str,           # 変更ID (UUID)
+    description: str,         # 説明（オプション）
+    cued_at: float,           # 予約時刻（Unix timestamp）
+    sequence_number: int      # 同一step内の順序
+)
+```
+
+**使用箇所**:
+- `CuedChangeTimeline.cue_change()` - 変更を予約
+- `CuedChangeTimeline.get_cued_at()` - 特定stepの予約取得
+- `TimelineManager.cue_change()` - Session層からの予約
+
+**例**:
+```python
+# step 1000でパターン変更を予約
+change = CuedChange(
+    target_global_step=1000,
+    batch=new_pattern_schedule,
+    client_id="alice",
+    description="Drop the bass"
+)
+
+timeline.cue_change(change, current_step=500)
+# → step 1000で自動適用
+```
+
+**意味**: DJ的な「次に出すトラック」
+- まだ実行されていない（未来予約）
+- global_stepが来たら自動適用
+- 複数の変更を同一stepに予約可能（マージされる）
+
+**頻度**: 中頻度（ライブコーディング中の変更予約）
+
+---
+
+#### 7️⃣ CuedChangeTimeline（予約管理）
+
+**定義**: 予約されたCuedChangeのタイムライン管理
+
+**データ型**: class
+
+**主要メソッド**:
+```python
+timeline = CuedChangeTimeline()
+
+# 予約追加
+success, msg = timeline.cue_change(change, current_step)
+
+# 特定stepの予約取得
+changes = timeline.get_cued_at(global_step)
+
+# 過去予約のクリーンアップ
+timeline.cleanup_past(current_step)
+```
+
+**制約**:
+- MAX_CHANGES_PER_STEP: 同一stepに最大10個の変更
+- MAX_MESSAGES_PER_BATCH: 1つのLoopScheduleに最大5000エントリ
+- CLEANUP_INTERVAL: 1000ステップごとに過去予約を自動削除
+
+**意味**: 「いつ何を実行するか」の予定表管理
+
+---
+
+#### Schedule/Cued用語の比較表
+
+| 項目 | LoopSchedule | CuedChange |
+|------|-------------|-----------|
+| **意味** | 確定済み実行時刻表 | 未来の変更予約 |
+| **状態** | 不変（frozen=True） | 可変（タイムラインから削除可能） |
+| **時制** | 過去完了（配置済み） | 未来（予約中） |
+| **類推** | 列車の時刻表 | DJのキューリスト |
+| **実行** | LoopSchedulerが毎step読む | global_stepが来たら適用 |
+| **頻度** | 低頻度（Session変更時） | 中頻度（パターン変更時） |
+| **データ** | 256step全体 | 1つの変更内容 |
+
+#### 命名の歴史（Schedule/Cued）
+
+- **v3.0以前**: ScheduledMessageBatch / ScheduledMessage / MessageScheduler
+  - 問題: "Scheduled"が「確定済み」と「予約中」の2つの意味で混在
+- **v3.1**: LoopSchedule / ScheduleEntry / LoopScheduler（確定済み実行時刻表）
+  - ScheduledChange → CuedChange（未来予約）
+  - 明確に分離: Schedule = 確定、Cued = 予約
+
+---
+
+### ID形式の体系
+
+| ID種別 | 形式 | 例 | 用途 | バリデーション |
+|--------|------|-----|------|--------------|
+| Session ID | 8桁hexadecimal | `a1b2c3d4` | セッション識別子 | 自動生成 |
+| Client ID | 4桁hexadecimal | `0a1f` | クライアント識別子 | 自動生成またはユーザー定義 |
+| Track ID | 4桁hexadecimal | `3e2b` | トラック識別子 | Track model で検証 |
+| Pattern ID | 4桁hexadecimal | `7f8a` | パターン識別子 | Pattern model で検証 |
+| Destination ID | 英数字+ハイフン/アンダースコア | `superdirt`, `volca_bass` | 送信先識別子 | destinations.yamlで定義 |
+
+**ID生成**:
+- Session/Client/Track/Pattern IDは`packages/oiduna_models/id_generator.py`で生成
+- Destination IDはdestinations.yamlで手動定義（英数字+ハイフン/アンダースコア許可）
+
+**コード参照**:
+- `packages/oiduna_models/id_generator.py:7` - generate_session_id()
+- `packages/oiduna_models/id_generator.py:12` - generate_client_id()
+- `packages/oiduna_models/track.py:15` - track_id validation
+- `packages/oiduna_models/pattern.py:14` - pattern_id validation
 
 ### 再生状態
 
@@ -304,6 +484,47 @@ list[ScheduledMessage]
   └→ MidiDestinationSender → MIDI送信
 ```
 
+### レイヤーアーキテクチャ（Layer 1-4）
+
+Oidunaは4層のデータ変換アーキテクチャで構成されています:
+
+| Layer | 名称 | 責務 | データ形式 | パッケージ |
+|-------|------|------|-----------|-----------|
+| **Layer 1** | 階層モデル層 | ユーザー向けデータ構造 | Session → Track → Pattern → PatternEvent | oiduna_models |
+| **Layer 2** | メッセージフォーマット層 | プロトコル非依存の表現 | ScheduledMessageBatch → ScheduledMessage | oiduna_scheduler/scheduler_models.py |
+| **Layer 3** | スケジューリング・ルーティング層 | パフォーマンス最適化 | MessageScheduler（O(1)検索）、DestinationRouter | oiduna_scheduler/scheduler.py, router.py |
+| **Layer 4** | プロトコル実装層 | 送信先固有の処理 | OscDestinationSender、MidiDestinationSender | oiduna_scheduler/senders.py |
+
+**データフロー**:
+```
+Layer 1: Session/Track/Pattern/PatternEvent (ユーザーフレンドリー)
+           ↓ SessionCompiler
+Layer 2: ScheduledMessageBatch (Destination-Agnostic)
+           ↓ MessageScheduler.load_messages()
+Layer 3: Step-indexed dict[int, list[int]] (O(1)検索)
+           ↓ DestinationRouter.send_messages()
+Layer 4: OSC/MIDI送信 (プロトコル固有)
+```
+
+**依存方向**:
+```
+API → Session → Models
+API → Loop → Scheduler → Models
+      └─────────────────→
+```
+
+**Single Responsibility原則**:
+- Layer 1: データバリデーションのみ（Pydantic）
+- Layer 2: メッセージ形式の標準化
+- Layer 3: 高速検索とルーティング
+- Layer 4: プロトコル変換と送信
+
+**コード参照**:
+- Layer 1: `packages/oiduna_models/`
+- Layer 2: `packages/oiduna_scheduler/scheduler_models.py`
+- Layer 3: `packages/oiduna_scheduler/scheduler.py`, `router.py`
+- Layer 4: `packages/oiduna_scheduler/senders.py`
+
 ### 拡張機能
 
 | 用語 | 説明 |
@@ -333,16 +554,41 @@ Extension 2 (変換)
 |------|------|------|
 | ステップ | 1/16音符単位 | 256ステップ = 16ビート |
 | ビート | 4分音符単位 | 16ビート = 4小節 |
-| サイクル | TidalCycles由来の単位 | 4.0サイクル = 4小節 |
+| バー（小節） | 4ビート単位 | 4バー = 1ループ |
+| サイクル | TidalCycles由来の単位 | 4.0サイクル = 1ループ |
 | BPM | Beats Per Minute | 120 BPM = 2ビート/秒 |
 
+**正確なタイミング仕様（固定）**:
+```
+1 step    = 1/16 note
+4 steps   = 1 beat (1/4 note)
+16 steps  = 1 bar (4 beats)
+64 steps  = 4 bars
+256 steps = 16 beats = 4 bars = 1 loop = 4.0 cycles (固定長)
+```
+
+**重要な設計制約**:
+- **256-step固定ループ**: Oidunaのコアアーキテクチャ（変更不可）
+- **step vs cycle**: PatternEventは両方を持つ
+  - `step: int` (0-255) - 量子化されたステップ番号（インデックス用）
+  - `cycle: float` (0.0-4.0) - 精密なタイミング（TidalCycles互換）
+- **position_update_interval**:
+  - `"beat"`: 4ステップごと（1ビート）に位置更新通知
+  - `"bar"`: 16ステップごと（1バー）に位置更新通知
+
 **時間換算表（120 BPM）**:
-| 単位 | 時間 |
-|------|------|
-| 1ステップ | 125ms |
-| 1ビート | 500ms |
-| 1小節 | 2秒 |
-| 1サイクル | 2秒 |
+| 単位 | ステップ数 | 時間 |
+|------|-----------|------|
+| 1ステップ | 1 | 125ms |
+| 1ビート | 4 | 500ms |
+| 1バー（小節） | 16 | 2秒 |
+| 1ループ | 256 | 32秒 |
+| 1サイクル | 64 | 8秒 |
+
+**コード参照**:
+- `packages/oiduna_models/events.py:10-11` - PatternEvent (step/cycle fields)
+- `packages/oiduna_loop/engine/loop_engine.py:23` - LOOP_STEPS = 256 定数
+- `packages/oiduna_models/environment.py:14` - position_update_interval
 
 ### パラメータ
 
@@ -386,6 +632,78 @@ Extension 2 (変換)
 | 早期リターン | 条件を満たさない場合の早期終了 |
 | リスト内包表記 | Pythonの効率的なリスト生成構文 |
 | walrus演算子 | := による式内での変数代入 |
+
+### IPC通信（Producer/Consumerパターン）
+
+Oidunaは**API層とLoop層の間**で双方向のIPC通信を行います。
+
+#### Commandフロー（API → Loop）
+
+| 役割 | クラス | 実装 | 用途 |
+|------|--------|------|------|
+| Producer | CommandProducer | ZeroMQ PUB or In-Process Queue | APIがコマンドを送信 |
+| Consumer | CommandConsumer | ZeroMQ SUB or In-Process Queue | Loopがコマンドを受信 |
+
+**コマンド種類**:
+- `Play`, `Stop`, `Pause` - 再生制御
+- `Compile` - パターンコンパイル
+- `Mute`, `Solo` - トラックミュート/ソロ
+- `SetBpm` - BPM変更
+
+#### Stateフロー（Loop → API）
+
+| 役割 | クラス | 実装 | 用途 |
+|------|--------|------|------|
+| Producer | StateProducer | InProcessStateProducer or ZeroMQ | Loopが状態を送信 |
+| Consumer | StateConsumer | In-Process Queue | APIが状態を受信 |
+
+**状態種類**:
+- Position - ステップ/ビート/バー/サイクル位置
+- PlaybackState - PLAYING/PAUSED/STOPPED
+- Errors - エラー通知
+- TrackInfo - トラック状態
+
+**IPC実装の種類**:
+- **InProcessStateProducer**: キューベース（単一プロセス用）
+- **ZeroMQ**: プロセス間通信（マルチプロセス用）
+
+**プロトコル定義**:
+```python
+# packages/oiduna_loop/ipc/protocols.py
+class CommandProducer(Protocol):
+    def send_command(self, command: Command) -> None: ...
+
+class CommandConsumer(Protocol):
+    def receive_command(self) -> Command | None: ...
+
+class StateProducer(Protocol):
+    def publish(self, state: dict) -> None: ...
+
+class StateConsumer(Protocol):
+    def consume(self) -> list[dict]: ...
+```
+
+**データフロー全体図**:
+```
+┌─────────────────────────────────────────────────────┐
+│ API層（FastAPI）                                     │
+│   CommandProducer.send_command() ────┐              │
+│   StateConsumer.consume() ←──────────┼──┐          │
+└──────────────────────────────────────┼──┼───────────┘
+                                       │  │
+                          Command      │  │ State
+                                       │  │
+┌──────────────────────────────────────┼──┼───────────┐
+│ Loop層（LoopEngine）                  │  │           │
+│   CommandConsumer.receive_command() ←┘  │           │
+│   StateProducer.publish() ──────────────┘          │
+└─────────────────────────────────────────────────────┘
+```
+
+**コード参照**:
+- `packages/oiduna_loop/ipc/protocols.py:10-40` - Protocol定義
+- `packages/oiduna_loop/ipc/command_receiver.py` - CommandConsumer実装
+- `packages/oiduna_loop/ipc/state_publisher.py` - StateProducer実装
 
 ### 通信プロトコル
 
@@ -615,6 +933,57 @@ container.tracks.create("kick", "Kick Track", ...)
 
 **詳細**: [knowledge/adr/0010-session-container-refactoring.md](knowledge/adr/0010-session-container-refactoring.md)
 
+### Manager Pattern（専門マネージャー）
+
+SessionContainerは**6つの専門Manager**を集約し、各Managerが単一責任を持ちます。
+
+| Manager | 責務 | 主要メソッド | データモデル |
+|---------|------|-------------|-------------|
+| **ClientManager** | Client CRUD | create(), get(), delete() | ClientInfo |
+| **TrackManager** | Track CRUD | create(), get(), update(), delete() | Track |
+| **PatternManager** | Pattern CRUD | create(), get(), update(), archive(), move() | Pattern |
+| **EnvironmentManager** | グローバル設定 | get(), update() | Environment |
+| **DestinationManager** | 送信先管理 | get_all(), remove() | OscDestinationConfig, MidiDestinationConfig |
+| **TimelineManager** | スケジュール変更 | schedule_change(), cancel_change() | TimelineChange |
+
+#### BaseManager プロトコル
+
+全Managerは`BaseManager`プロトコルを実装:
+```python
+class BaseManager(Protocol):
+    def _emit_change(self, change_type: str, data: dict) -> None:
+        """SessionChangePublisherに変更通知を発行"""
+```
+
+#### SessionChangePublisher プロトコル
+
+ManagerがCRUD操作を通知するためのプロトコル:
+```python
+class SessionChangePublisher(Protocol):
+    def publish(self, change: dict) -> None:
+        """SessionChange変更通知を配信"""
+```
+
+**変更通知発行フロー**:
+```
+Manager.create() / update() / delete()
+  ↓ _emit_change()
+SessionChangePublisher.publish()
+  ↓
+InProcessStateProducer._queue
+  ↓
+SSE endpoint (/api/stream/events)
+  ↓
+クライアント（ブラウザ）
+```
+
+**コード参照**:
+- `packages/oiduna_session/container.py:10-30` - SessionContainer
+- `packages/oiduna_session/managers/base.py:8-15` - BaseManager protocol
+- `packages/oiduna_session/managers/client_manager.py` - ClientManager
+- `packages/oiduna_session/managers/track_manager.py` - TrackManager
+- `packages/oiduna_session/managers/pattern_manager.py` - PatternManager
+
 ### oiduna_models / oiduna_auth / oiduna_session
 
 **Phase 4で追加された新規パッケージ**:
@@ -639,7 +1008,7 @@ container.tracks.create("kick", "Kick Track", ...)
 
 ---
 
-**バージョン**: 2.1.0 (SessionContainer追加版)
+**バージョン**: 2.2.0 (アーキテクチャ概念拡充版)
 **作成日**: 2026-02-27
-**最終更新**: 2026-02-28 (Phase 5完了)
+**最終更新**: 2026-03-11 (ID体系、Layer 1-4、IPC、Manager pattern追加)
 **メンテナンス**: 用語追加時はこのファイルを更新

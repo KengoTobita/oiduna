@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from oiduna_api.dependencies import get_container
 from oiduna_api.services.loop_service import LoopService, get_loop_service
 from oiduna_session import SessionContainer
-from oiduna_scheduler.scheduler_models import ScheduledMessage, ScheduledMessageBatch
+from oiduna_scheduler.scheduler_models import ScheduleEntry, LoopSchedule
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ router = APIRouter()
 # Request/Response Models
 # ================================================================
 
-class ScheduledMessageRequest(BaseModel):
+class ScheduleEntryRequest(BaseModel):
     """Individual scheduled message for timeline API"""
 
     destination_id: str = Field(..., description="Destination ID (e.g., 'superdirt')")
@@ -29,11 +29,11 @@ class ScheduledMessageRequest(BaseModel):
     params: dict = Field(default_factory=dict, description="Generic parameters dict")
 
 
-class ScheduleChangeRequest(BaseModel):
+class CueChangeRequest(BaseModel):
     """Request body for POST /playback/schedule"""
 
     target_global_step: int = Field(..., gt=0, description="When to apply (global step)")
-    messages: list[ScheduledMessageRequest] = Field(
+    messages: list[ScheduleEntryRequest] = Field(
         ...,
         description="Messages to schedule"
     )
@@ -46,7 +46,7 @@ class UpdateChangeRequest(BaseModel):
     """Request body for PATCH /playback/schedule/{id}"""
 
     target_global_step: Optional[int] = Field(None, gt=0, description="New target step")
-    messages: Optional[list[ScheduledMessageRequest]] = Field(None, description="New messages")
+    messages: Optional[list[ScheduleEntryRequest]] = Field(None, description="New messages")
     bpm: Optional[float] = Field(None, gt=0, description="New BPM")
     pattern_length: Optional[float] = Field(None, gt=0, description="New pattern length")
     description: Optional[str] = Field(None, max_length=200, description="New description")
@@ -60,12 +60,12 @@ class ChangeResponse(BaseModel):
     client_id: str
     client_name: str
     description: str
-    scheduled_at: float
+    cued_at: float
     sequence_number: int
     message_count: int
 
 
-class ScheduleChangeResponse(BaseModel):
+class CueChangeResponse(BaseModel):
     """Response for POST /playback/schedule"""
 
     status: str
@@ -110,13 +110,13 @@ def get_authenticated_client(
 # Endpoints
 # ================================================================
 
-@router.post("/schedule", response_model=ScheduleChangeResponse)
-async def schedule_change(
-    request: ScheduleChangeRequest,
+@router.post("/schedule", response_model=CueChangeResponse)
+async def cue_change(
+    request: CueChangeRequest,
     client_auth: tuple[str, str] = Depends(get_authenticated_client),
     container: SessionContainer = Depends(get_container),
     loop_service: LoopService = Depends(get_loop_service),
-) -> ScheduleChangeResponse:
+) -> CueChangeResponse:
     """
     Schedule a pattern change for a future global step.
 
@@ -135,9 +135,9 @@ async def schedule_change(
             detail=f"target_global_step ({request.target_global_step}) must be > current ({current_global_step})"
         )
 
-    # Convert messages to ScheduledMessage objects
+    # Convert messages to ScheduleEntry objects
     messages = [
-        ScheduledMessage(
+        ScheduleEntry(
             destination_id=msg.destination_id,
             cycle=msg.cycle,
             step=msg.step,
@@ -147,14 +147,14 @@ async def schedule_change(
     ]
 
     # Create batch
-    batch = ScheduledMessageBatch(
+    batch = LoopSchedule(
         messages=tuple(messages),
         bpm=request.bpm,
         pattern_length=request.pattern_length,
     )
 
     # Schedule the change
-    success, msg, change_id = container.timeline.schedule_change(
+    success, msg, change_id = container.timeline.cue_change(
         batch=batch,
         target_global_step=request.target_global_step,
         client_id=client_id,
@@ -166,7 +166,7 @@ async def schedule_change(
     if not success:
         raise HTTPException(status_code=400, detail=msg)
 
-    return ScheduleChangeResponse(
+    return CueChangeResponse(
         status="scheduled",
         change_id=change_id,
         target_global_step=request.target_global_step,
@@ -201,7 +201,7 @@ async def get_timeline(
             client_id=change.client_id,
             client_name=change.client_name,
             description=change.description,
-            scheduled_at=change.scheduled_at,
+            cued_at=change.cued_at,
             sequence_number=change.sequence_number,
             message_count=len(change.batch.messages),
         )
@@ -236,7 +236,7 @@ async def get_change(
         client_id=change.client_id,
         client_name=change.client_name,
         description=change.description,
-        scheduled_at=change.scheduled_at,
+        cued_at=change.cued_at,
         sequence_number=change.sequence_number,
         message_count=len(change.batch.messages),
     )
@@ -269,7 +269,7 @@ async def update_change(
     # Build new batch (use old values if not provided)
     if request.messages is not None:
         messages = [
-            ScheduledMessage(
+            ScheduleEntry(
                 destination_id=msg.destination_id,
                 cycle=msg.cycle,
                 step=msg.step,
@@ -280,7 +280,7 @@ async def update_change(
     else:
         messages = old_change.batch.messages
 
-    new_batch = ScheduledMessageBatch(
+    new_batch = LoopSchedule(
         messages=tuple(messages),
         bpm=request.bpm if request.bpm is not None else old_change.batch.bpm,
         pattern_length=request.pattern_length if request.pattern_length is not None else old_change.batch.pattern_length,

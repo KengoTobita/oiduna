@@ -1,19 +1,19 @@
-"""Tests for ScheduledChangeTimeline"""
+"""Tests for CuedChangeTimeline"""
 
 import pytest
-from oiduna_timeline.timeline import ScheduledChangeTimeline
-from oiduna_timeline.models import ScheduledChange
-from oiduna_scheduler.scheduler_models import ScheduledMessage, ScheduledMessageBatch
+from oiduna_timeline.timeline import CuedChangeTimeline
+from oiduna_timeline.models import CuedChange
+from oiduna_scheduler.scheduler_models import ScheduleEntry, LoopSchedule
 
 
-def create_test_change(target_step: int, client_id: str = "c1", num_messages: int = 1) -> ScheduledChange:
+def create_test_change(target_step: int, client_id: str = "c1", num_messages: int = 1) -> CuedChange:
     """Helper to create a test change"""
     messages = [
-        ScheduledMessage("superdirt", 0.0, i, {"s": "bd"})
+        ScheduleEntry("superdirt", 0.0, i, {"s": "bd"})
         for i in range(num_messages)
     ]
-    batch = ScheduledMessageBatch(messages=tuple(messages))
-    return ScheduledChange(
+    batch = LoopSchedule(entries=tuple(messages))
+    return CuedChange(
         target_global_step=target_step,
         batch=batch,
         client_id=client_id,
@@ -22,13 +22,13 @@ def create_test_change(target_step: int, client_id: str = "c1", num_messages: in
 
 def test_timeline_creation():
     """Test timeline initialization"""
-    timeline = ScheduledChangeTimeline()
+    timeline = CuedChangeTimeline()
     assert timeline.size() == 0
 
 
 def test_add_change_success():
     """Test adding a valid change"""
-    timeline = ScheduledChangeTimeline()
+    timeline = CuedChangeTimeline()
     change = create_test_change(1000)
 
     success, msg = timeline.add_change(change, current_global_step=500)
@@ -40,7 +40,7 @@ def test_add_change_success():
 
 def test_add_change_rejects_past_step():
     """Test that changes for past steps are rejected"""
-    timeline = ScheduledChangeTimeline()
+    timeline = CuedChangeTimeline()
     change = create_test_change(500)
 
     success, msg = timeline.add_change(change, current_global_step=1000)
@@ -52,7 +52,7 @@ def test_add_change_rejects_past_step():
 
 def test_add_change_rejects_current_step():
     """Test that changes for current step are rejected"""
-    timeline = ScheduledChangeTimeline()
+    timeline = CuedChangeTimeline()
     change = create_test_change(1000)
 
     success, msg = timeline.add_change(change, current_global_step=1000)
@@ -63,7 +63,7 @@ def test_add_change_rejects_current_step():
 
 def test_add_change_duplicate_id():
     """Test that duplicate change_id is rejected"""
-    timeline = ScheduledChangeTimeline()
+    timeline = CuedChangeTimeline()
     change1 = create_test_change(1000)
 
     # Add first time
@@ -78,7 +78,7 @@ def test_add_change_duplicate_id():
 
 def test_add_change_max_changes_per_step():
     """Test MAX_CHANGES_PER_STEP limit"""
-    timeline = ScheduledChangeTimeline()
+    timeline = CuedChangeTimeline()
 
     # Add up to the limit
     for i in range(timeline.MAX_CHANGES_PER_STEP):
@@ -95,7 +95,7 @@ def test_add_change_max_changes_per_step():
 
 def test_add_change_max_messages_per_batch():
     """Test MAX_MESSAGES_PER_BATCH limit"""
-    timeline = ScheduledChangeTimeline()
+    timeline = CuedChangeTimeline()
     change = create_test_change(1000, num_messages=timeline.MAX_MESSAGES_PER_BATCH + 1)
 
     success, msg = timeline.add_change(change, current_global_step=500)
@@ -106,7 +106,7 @@ def test_add_change_max_messages_per_batch():
 
 def test_add_change_assigns_sequence_number():
     """Test that sequence numbers are assigned incrementally"""
-    timeline = ScheduledChangeTimeline()
+    timeline = CuedChangeTimeline()
 
     change1 = create_test_change(1000, client_id="c1")
     change2 = create_test_change(1000, client_id="c2")
@@ -123,7 +123,7 @@ def test_add_change_assigns_sequence_number():
 
 def test_get_changes_at():
     """Test retrieving changes at specific step"""
-    timeline = ScheduledChangeTimeline()
+    timeline = CuedChangeTimeline()
 
     change1 = create_test_change(1000, client_id="c1")
     change2 = create_test_change(1000, client_id="c2")
@@ -145,7 +145,7 @@ def test_get_changes_at():
 
 def test_get_changes_at_sorted_by_sequence():
     """Test that changes are returned sorted by sequence_number"""
-    timeline = ScheduledChangeTimeline()
+    timeline = CuedChangeTimeline()
 
     # Add in reverse order
     change3 = create_test_change(1000, client_id="c3")
@@ -164,7 +164,7 @@ def test_get_changes_at_sorted_by_sequence():
 
 def test_get_change_by_id():
     """Test retrieving a change by its ID"""
-    timeline = ScheduledChangeTimeline()
+    timeline = CuedChangeTimeline()
     change = create_test_change(1000, client_id="c1")
 
     timeline.add_change(change, current_global_step=500)
@@ -177,7 +177,7 @@ def test_get_change_by_id():
 
 def test_get_change_by_id_not_found():
     """Test get_change_by_id returns None for unknown ID"""
-    timeline = ScheduledChangeTimeline()
+    timeline = CuedChangeTimeline()
 
     retrieved = timeline.get_change_by_id("nonexistent-uuid")
     assert retrieved is None
@@ -185,7 +185,7 @@ def test_get_change_by_id_not_found():
 
 def test_cancel_change():
     """Test cancelling a scheduled change"""
-    timeline = ScheduledChangeTimeline()
+    timeline = CuedChangeTimeline()
     change = create_test_change(1000, client_id="c1")
 
     timeline.add_change(change, current_global_step=500)
@@ -203,7 +203,7 @@ def test_cancel_change():
 
 def test_cancel_change_not_found():
     """Test cancelling a non-existent change"""
-    timeline = ScheduledChangeTimeline()
+    timeline = CuedChangeTimeline()
 
     success, msg = timeline.cancel_change("nonexistent-uuid")
     assert success is False
@@ -212,7 +212,7 @@ def test_cancel_change_not_found():
 
 def test_update_change():
     """Test updating a scheduled change"""
-    timeline = ScheduledChangeTimeline()
+    timeline = CuedChangeTimeline()
     change = create_test_change(1000, client_id="c1")
 
     timeline.add_change(change, current_global_step=500)
@@ -240,7 +240,7 @@ def test_update_change():
 
 def test_update_change_id_mismatch():
     """Test that update rejects ID mismatch"""
-    timeline = ScheduledChangeTimeline()
+    timeline = CuedChangeTimeline()
     change = create_test_change(1000, client_id="c1")
 
     timeline.add_change(change, current_global_step=500)
@@ -260,7 +260,7 @@ def test_update_change_id_mismatch():
 
 def test_cleanup_past():
     """Test cleanup of past changes"""
-    timeline = ScheduledChangeTimeline()
+    timeline = CuedChangeTimeline()
 
     change1 = create_test_change(500, client_id="c1")
     change2 = create_test_change(1000, client_id="c2")
@@ -286,7 +286,7 @@ def test_cleanup_past():
 
 def test_cleanup_past_no_changes():
     """Test cleanup when no changes are past"""
-    timeline = ScheduledChangeTimeline()
+    timeline = CuedChangeTimeline()
 
     change = create_test_change(1000, client_id="c1")
     timeline.add_change(change, current_global_step=500)
@@ -299,7 +299,7 @@ def test_cleanup_past_no_changes():
 
 def test_get_all_upcoming():
     """Test getting all upcoming changes"""
-    timeline = ScheduledChangeTimeline()
+    timeline = CuedChangeTimeline()
 
     change1 = create_test_change(500, client_id="c1")
     change2 = create_test_change(1000, client_id="c2")
@@ -319,7 +319,7 @@ def test_get_all_upcoming():
 
 def test_get_all_upcoming_sorted():
     """Test that upcoming changes are sorted by step and sequence"""
-    timeline = ScheduledChangeTimeline()
+    timeline = CuedChangeTimeline()
 
     # Add in mixed order
     change3 = create_test_change(2000, client_id="c3")
@@ -342,7 +342,7 @@ def test_get_all_upcoming_sorted():
 
 def test_get_all_upcoming_limit():
     """Test limit parameter"""
-    timeline = ScheduledChangeTimeline()
+    timeline = CuedChangeTimeline()
 
     for i in range(10):
         change = create_test_change(1000 + i * 100, client_id=f"c{i}")

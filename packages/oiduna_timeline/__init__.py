@@ -5,12 +5,12 @@ Provides timeline-based scheduling for pattern changes,
 enabling multi-loop-ahead reservations.
 """
 
-from .models import ScheduledChange
-from .timeline import ScheduledChangeTimeline
+from .models import CuedChange
+from .timeline import CuedChangeTimeline
 from .merger import merge_changes
 
 __all__ = [
-    "ScheduledChange",
-    "ScheduledChangeTimeline",
+    "CuedChange",
+    "CuedChangeTimeline",
     "merge_changes",
 ]

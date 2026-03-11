@@ -2,7 +2,7 @@
 Generic OSC Sender
 
 Sends OSC messages to any OSC destination (SuperDirt, Supernova, scsynth, etc.)
-Uses ScheduledMessage architecture.
+Uses ScheduleEntry architecture.
 """
 
 from __future__ import annotations

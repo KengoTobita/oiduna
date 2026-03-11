@@ -4,31 +4,33 @@ from typing import Any, Optional, Protocol
 from oiduna_models import Session
 
 
-class SessionEventPublisher(Protocol):
+class SessionChangePublisher(Protocol):
     """
-    Protocol for publishing session CRUD events.
+    Protocol for publishing session CRUD change notifications.
 
-    Publishes session-layer CRUD events (track_created, pattern_updated, etc.)
+    Publishes session-layer CRUD changes (track_created, pattern_updated, etc.)
     to connected clients via SSE endpoint for real-time notification.
 
-    This is distinct from StateProducer (Loop layer state updates like position, status).
+    This is distinct from:
+        - PatternEvent: Musical timing events in Pattern domain model
+        - StateProducer: Loop layer state updates (position, status)
 
     Implementations:
         - InProcessStateProducer: In-process queue-based implementation
 
-    Example events:
+    Example change events:
         - client_connected, client_disconnected
         - track_created, track_updated, track_deleted
         - pattern_created, pattern_updated, pattern_archived
         - environment_updated
     """
 
-    def publish(self, event: dict[str, Any]) -> None:
+    def publish(self, change: dict[str, Any]) -> None:
         """
-        Publish a session event to all connected clients.
+        Publish a session change notification to all connected clients.
 
         Args:
-            event: Event dictionary with 'type' and 'data' keys
+            change: Change dictionary with 'type' and 'data' keys
                 Example: {"type": "track_created", "data": {...}}
         """
         ...
@@ -45,30 +47,30 @@ class BaseManager:
     def __init__(
         self,
         session: Session,
-        event_publisher: Optional[SessionEventPublisher] = None,
+        change_publisher: Optional[SessionChangePublisher] = None,
     ) -> None:
         """
         Initialize the base manager.
 
         Args:
             session: The session object to manage
-            event_publisher: Optional session event publisher for emitting CRUD events.
-                Accepts SessionEventPublisher protocol.
+            change_publisher: Optional session change publisher for emitting CRUD change notifications.
+                Accepts SessionChangePublisher protocol.
         """
         self.session = session
-        self.event_publisher = event_publisher
+        self.change_publisher = change_publisher
 
-    def _emit_event(self, event_type: str, data: dict[str, Any]) -> None:
+    def _emit_change(self, change_type: str, data: dict[str, Any]) -> None:
         """
-        Emit an SSE event if event_publisher is configured.
+        Emit a session change notification if change_publisher is configured.
 
         Args:
-            event_type: Type of the event (e.g., "client_created")
-            data: Event data dictionary
+            change_type: Type of the change (e.g., "client_created", "track_updated")
+            data: Change data dictionary
         """
-        if self.event_publisher:
+        if self.change_publisher:
             try:
-                self.event_publisher.publish({"type": event_type, "data": data})
+                self.change_publisher.publish({"type": change_type, "data": data})
             except Exception:
-                # Don't fail operations if event emission fails
+                # Don't fail operations if change emission fails
                 pass

@@ -22,7 +22,7 @@ def get_container() -> SessionContainer:
         async def list_tracks(
             container: SessionContainer = Depends(get_container)
         ):
-            return container.tracks.list()
+            return container.tracks.list_tracks()
     """
     global _container
     if _container is None:

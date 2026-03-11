@@ -82,14 +82,14 @@ class TestTrackManagerRetrieval:
         tm = managers["track"]
         track1 = tm.create("kick", "sd", "c1")
         track2 = tm.create("snare", "sd", "c1")
-        tracks = tm.list()
+        tracks = tm.list_tracks()
         assert len(tracks) == 2
         assert {t.track_id for t in tracks} == {track1.track_id, track2.track_id}
 
     def test_list_empty(self, managers):
         """Test listing tracks when none exist."""
         tm = managers["track"]
-        assert tm.list() == []
+        assert tm.list_tracks() == []
 
 
 class TestTrackManagerUpdate:

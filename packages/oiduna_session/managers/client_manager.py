@@ -2,7 +2,7 @@
 
 from typing import Any, Optional
 from oiduna_models import Session, ClientInfo
-from .base import BaseManager, SessionEventPublisher
+from .base import BaseManager, SessionChangePublisher
 
 
 class ClientManager(BaseManager):
@@ -15,7 +15,7 @@ class ClientManager(BaseManager):
     def __init__(
         self,
         session: Session,
-        event_publisher: Optional[SessionEventPublisher] = None,
+        event_publisher: Optional[SessionChangePublisher] = None,
     ) -> None:
         """
         Initialize the ClientManager.
@@ -62,7 +62,7 @@ class ClientManager(BaseManager):
         self.session.clients[client_id] = client
 
         # Emit event
-        self._emit_event("client_connected", {
+        self._emit_change("client_connected", {
             "client_id": client_id,
             "client_name": client_name,
             "distribution": distribution,
@@ -82,7 +82,7 @@ class ClientManager(BaseManager):
         """
         return self.session.clients.get(client_id)
 
-    def list(self) -> list[ClientInfo]:
+    def list_clients(self) -> list[ClientInfo]:
         """
         List all clients.
 
@@ -108,7 +108,7 @@ class ClientManager(BaseManager):
             del self.session.clients[client_id]
 
             # Emit event
-            self._emit_event("client_disconnected", {
+            self._emit_change("client_disconnected", {
                 "client_id": client_id,
             })
 

@@ -21,7 +21,7 @@ router = APIRouter()
 # New Destination-Based API Models
 # ================================================================
 
-class ScheduledMessageRequest(BaseModel):
+class ScheduleEntryRequest(BaseModel):
     """Individual scheduled message for destination-based API"""
 
     destination_id: str = Field(..., description="Destination ID (e.g., 'superdirt')")
@@ -33,7 +33,7 @@ class ScheduledMessageRequest(BaseModel):
 class SessionRequest(BaseModel):
     """Request body for POST /playback/session (new destination-based API)"""
 
-    messages: list[ScheduledMessageRequest] = Field(
+    messages: list[ScheduleEntryRequest] = Field(
         default_factory=list,
         description="Scheduled messages for all destinations"
     )
@@ -118,7 +118,7 @@ async def load_session(
 ) -> dict:
     """Load a session using the new destination-based API.
 
-    This is the new endpoint that accepts ScheduledMessageBatch format.
+    This is the new endpoint that accepts LoopSchedule format.
     Messages are generic and route to configured destinations.
 
     The request body contains:
@@ -199,7 +199,7 @@ async def sync_session_to_engine(
     """
     Sync session state to loop engine with optimistic locking.
 
-    Compiles the current Session (tracks/patterns) into ScheduledMessageBatch
+    Compiles the current Session (tracks/patterns) into LoopSchedule
     and loads it into the loop engine.
 
     This endpoint ensures atomic updates using version-based optimistic locking:

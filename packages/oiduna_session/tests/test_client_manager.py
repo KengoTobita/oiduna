@@ -57,13 +57,13 @@ class TestClientManagerRetrieval:
         """Test listing all clients."""
         client_manager.create("c1", "Alice")
         client_manager.create("c2", "Bob")
-        clients = client_manager.list()
+        clients = client_manager.list_clients()
         assert len(clients) == 2
         assert {c.client_id for c in clients} == {"c1", "c2"}
 
     def test_list_empty(self, client_manager):
         """Test listing clients when none exist."""
-        assert client_manager.list() == []
+        assert client_manager.list_clients() == []
 
 
 class TestClientManagerDeletion:

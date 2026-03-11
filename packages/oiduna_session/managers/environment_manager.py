@@ -2,7 +2,7 @@
 
 from typing import Any, Optional
 from oiduna_models import Environment, Session
-from .base import BaseManager, SessionEventPublisher
+from .base import BaseManager, SessionChangePublisher
 
 
 class EnvironmentManager(BaseManager):
@@ -15,7 +15,7 @@ class EnvironmentManager(BaseManager):
     def __init__(
         self,
         session: Session,
-        event_publisher: Optional[SessionEventPublisher] = None,
+        event_publisher: Optional[SessionChangePublisher] = None,
     ) -> None:
         """
         Initialize the EnvironmentManager.
@@ -58,6 +58,6 @@ class EnvironmentManager(BaseManager):
 
         # Emit event
         if updated_fields:
-            self._emit_event("environment_updated", updated_fields)
+            self._emit_change("environment_updated", updated_fields)
 
         return self.session.environment

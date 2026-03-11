@@ -12,8 +12,8 @@ import pytest
 
 
 @dataclass(frozen=True)
-class MockScheduledMessage:
-    """Mock ScheduledMessage for testing"""
+class MockScheduleEntry:
+    """Mock ScheduleEntry for testing"""
 
     destination_id: str
     cycle: float
@@ -47,7 +47,7 @@ class TestBeforeSendHooksPerformance:
     def test_hook_execution_time_single_message(self):
         """Verify hook execution time with 1 message"""
         messages = [
-            MockScheduledMessage(
+            MockScheduleEntry(
                 destination_id="superdirt",
                 cycle=0.0,
                 step=0,
@@ -79,7 +79,7 @@ class TestBeforeSendHooksPerformance:
     def test_hook_execution_time_multiple_messages(self):
         """Verify hook execution time with 4 messages"""
         messages = [
-            MockScheduledMessage(
+            MockScheduleEntry(
                 destination_id="superdirt",
                 cycle=0.0,
                 step=0,
@@ -123,7 +123,7 @@ class TestBeforeSendHooksPerformance:
     def test_hook_execution_time_high_density(self):
         """Verify hook execution time with 10 messages (high density)"""
         messages = [
-            MockScheduledMessage(
+            MockScheduleEntry(
                 destination_id="superdirt",
                 cycle=0.0,
                 step=0,
@@ -177,7 +177,7 @@ class TestBeforeSendHooksPerformance:
     def test_hook_with_mixed_destinations(self):
         """Verify hook performance with mixed destinations (filtering logic)"""
         messages = [
-            MockScheduledMessage(
+            MockScheduleEntry(
                 destination_id="superdirt" if i % 2 == 0 else "midi",
                 cycle=0.0,
                 step=0,
@@ -212,7 +212,7 @@ class TestBeforeSendHooksPerformance:
     def test_hook_correctness(self):
         """Verify hook produces correct output"""
         messages = [
-            MockScheduledMessage(
+            MockScheduleEntry(
                 destination_id="superdirt",
                 cycle=0.0,
                 step=0,
@@ -231,7 +231,7 @@ class TestBeforeSendHooksPerformance:
     def test_hook_with_bpm_change(self):
         """Verify hook uses current BPM (not cached)"""
         messages = [
-            MockScheduledMessage(
+            MockScheduleEntry(
                 destination_id="superdirt",
                 cycle=0.0,
                 step=0,

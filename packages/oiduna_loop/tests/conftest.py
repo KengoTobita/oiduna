@@ -70,7 +70,7 @@ def test_engine(
 @pytest.fixture
 def sample_session_data() -> dict[str, Any]:
     """
-    Create sample session data for testing (new ScheduledMessageBatch format).
+    Create sample session data for testing (new LoopSchedule format).
 
     Provides a minimal session with kick and hihat tracks for testing.
     """

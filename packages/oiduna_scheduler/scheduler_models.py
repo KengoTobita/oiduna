@@ -1,5 +1,5 @@
 """
-Scheduled message models.
+Loop schedule models.
 
 These use dataclasses (not Pydantic) for maximum runtime performance.
 Validation happens in MARS - Oiduna trusts the input.
@@ -11,9 +11,11 @@ from typing import Any
 
 
 @dataclass(frozen=True, slots=True)
-class ScheduledMessage:
+class ScheduleEntry:
     """
-    Lightweight scheduled message for routing to destinations.
+    Single entry in the loop schedule.
+
+    Represents one timed event (step + destination + params) in the 256-step loop.
 
     Design principles:
     - frozen=True for immutability (thread-safe, cacheable)
@@ -21,8 +23,8 @@ class ScheduledMessage:
     - No validation - MARS is responsible for correctness
     - Generic params dict - no domain knowledge
 
-    Example (SuperDirt message from MARS):
-        >>> msg = ScheduledMessage(
+    Example (SuperDirt entry from MARS):
+        >>> entry = ScheduleEntry(
         ...     destination_id="superdirt",
         ...     cycle=3.5,
         ...     step=56,
@@ -36,8 +38,8 @@ class ScheduledMessage:
         ...     }
         ... )
 
-    Example (MIDI message from MARS):
-        >>> msg = ScheduledMessage(
+    Example (MIDI entry from MARS):
+        >>> entry = ScheduleEntry(
         ...     destination_id="volca_bass",
         ...     cycle=1.0,
         ...     step=0,
@@ -65,7 +67,7 @@ class ScheduledMessage:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> ScheduledMessage:
+    def from_dict(cls, data: dict[str, Any]) -> ScheduleEntry:
         """Create from dictionary (for JSON deserialization)."""
         return cls(
             destination_id=data["destination_id"],
@@ -76,22 +78,25 @@ class ScheduledMessage:
 
 
 @dataclass(frozen=True)
-class ScheduledMessageBatch:
+class LoopSchedule:
     """
-    Batch of scheduled messages for a session.
+    256-step loop execution schedule (immutable timetable).
+
+    Represents the complete execution plan for one loop iteration.
+    Like a train timetable - once compiled, it's fixed and just executed step-by-step.
 
     Sent from MARS to Oiduna via HTTP API.
 
     Example:
-        >>> batch = ScheduledMessageBatch(
-        ...     messages=[msg1, msg2, msg3],
+        >>> schedule = LoopSchedule(
+        ...     entries=[entry1, entry2, entry3],
         ...     bpm=120.0,
         ...     pattern_length=4.0
         ... )
-        >>> batch_dict = batch.to_dict()  # For JSON
+        >>> schedule_dict = schedule.to_dict()  # For JSON
     """
 
-    messages: tuple[ScheduledMessage, ...]  # All messages for session
+    entries: tuple[ScheduleEntry, ...]  # All entries in the loop schedule
     bpm: float = 120.0  # Tempo
     pattern_length: float = 4.0  # Pattern length in cycles
     # destinations removed as field - now a cached property
@@ -99,13 +104,13 @@ class ScheduledMessageBatch:
     @property
     def destinations(self) -> frozenset[str]:
         """
-        Auto-infer destination IDs from messages (cached).
+        Auto-infer destination IDs from entries (cached).
 
         This optimization eliminates redundant storage - destinations
-        are always derivable from the messages themselves.
+        are always derivable from the entries themselves.
 
         Returns:
-            Frozenset of destination IDs referenced in messages.
+            Frozenset of destination IDs referenced in schedule entries.
         """
         # Cache the result to avoid recomputation
         if not hasattr(self, '_cached_destinations'):
@@ -113,27 +118,29 @@ class ScheduledMessageBatch:
             object.__setattr__(
                 self,
                 '_cached_destinations',
-                frozenset(msg.destination_id for msg in self.messages)
+                frozenset(entry.destination_id for entry in self.entries)
             )
         return self._cached_destinations
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary (for JSON serialization)."""
         return {
-            "messages": [msg.to_dict() for msg in self.messages],
+            "entries": [entry.to_dict() for entry in self.entries],
             "bpm": self.bpm,
             "pattern_length": self.pattern_length,
             "destinations": list(self.destinations),
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> ScheduledMessageBatch:
+    def from_dict(cls, data: dict[str, Any]) -> LoopSchedule:
         """Create from dictionary (for JSON deserialization)."""
-        messages = [ScheduledMessage.from_dict(msg) for msg in data["messages"]]
+        # Support both old "messages" key and new "entries" key for compatibility
+        entries_data = data.get("entries") or data.get("messages", [])
+        entries = [ScheduleEntry.from_dict(entry) for entry in entries_data]
 
         # destinations is now a property, so we don't pass it to constructor
         return cls(
-            messages=tuple(messages),
+            entries=tuple(entries),
             bpm=data.get("bpm", 120.0),
             pattern_length=data.get("pattern_length", 4.0),
         )

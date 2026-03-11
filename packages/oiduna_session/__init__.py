@@ -3,7 +3,7 @@ Session management package for Oiduna.
 
 Provides:
 - SessionContainer: 軽量なマネージャーコンテナ
-- SessionCompiler: Compile Session to ScheduledMessageBatch
+- SessionCompiler: Compile Session to LoopSchedule
 - SessionValidator: Business logic validation
 """
 

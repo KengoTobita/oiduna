@@ -9,10 +9,10 @@ from __future__ import annotations
 from typing import Optional
 from collections import defaultdict
 
-from .models import ScheduledChange
+from .models import CuedChange
 
 
-class ScheduledChangeTimeline:
+class CuedChangeTimeline:
     """
     Timeline manager for scheduled pattern changes.
 
@@ -23,7 +23,7 @@ class ScheduledChangeTimeline:
     - Hard limits to prevent abuse (MAX_CHANGES_PER_STEP, MAX_MESSAGES_PER_BATCH)
 
     Example:
-        >>> timeline = ScheduledChangeTimeline()
+        >>> timeline = CuedChangeTimeline()
         >>> success, msg = timeline.add_change(change, current_global_step=500)
         >>> changes = timeline.get_changes_at(1000)
         >>> timeline.cleanup_past(1000)
@@ -35,13 +35,13 @@ class ScheduledChangeTimeline:
 
     def __init__(self) -> None:
         """Initialize empty timeline."""
-        self._timeline: dict[int, list[ScheduledChange]] = defaultdict(list)
+        self._timeline: dict[int, list[CuedChange]] = defaultdict(list)
         self._id_to_step: dict[str, int] = {}  # Fast lookup: change_id → step
         self._sequence_counter: int = 0  # Global sequence counter for ordering
 
     def add_change(
         self,
-        change: ScheduledChange,
+        change: CuedChange,
         current_global_step: int,
     ) -> tuple[bool, str]:
         """
@@ -76,8 +76,8 @@ class ScheduledChangeTimeline:
             return False, f"MAX_CHANGES_PER_STEP ({self.MAX_CHANGES_PER_STEP}) exceeded at step {change.target_global_step}"
 
         # Check MAX_MESSAGES_PER_BATCH
-        if len(change.batch.messages) > self.MAX_MESSAGES_PER_BATCH:
-            return False, f"MAX_MESSAGES_PER_BATCH ({self.MAX_MESSAGES_PER_BATCH}) exceeded: {len(change.batch.messages)} messages"
+        if len(change.batch.entries) > self.MAX_MESSAGES_PER_BATCH:
+            return False, f"MAX_MESSAGES_PER_BATCH ({self.MAX_MESSAGES_PER_BATCH}) exceeded: {len(change.batch.entries)} messages"
 
         # Assign sequence number for this step
         self._sequence_counter += 1
@@ -91,7 +91,7 @@ class ScheduledChangeTimeline:
 
         return True, ""
 
-    def get_changes_at(self, global_step: int) -> list[ScheduledChange]:
+    def get_changes_at(self, global_step: int) -> list[CuedChange]:
         """
         Get all scheduled changes for a specific step.
 
@@ -104,7 +104,7 @@ class ScheduledChangeTimeline:
         changes = self._timeline.get(global_step, [])
         return sorted(changes, key=lambda c: c.sequence_number)
 
-    def get_change_by_id(self, change_id: str) -> Optional[ScheduledChange]:
+    def get_change_by_id(self, change_id: str) -> Optional[CuedChange]:
         """
         Get a specific change by its ID.
 
@@ -112,7 +112,7 @@ class ScheduledChangeTimeline:
             change_id: The change UUID to look up.
 
         Returns:
-            The ScheduledChange, or None if not found.
+            The CuedChange, or None if not found.
         """
         step = self._id_to_step.get(change_id)
         if step is None:
@@ -155,7 +155,7 @@ class ScheduledChangeTimeline:
     def update_change(
         self,
         change_id: str,
-        new_change: ScheduledChange,
+        new_change: CuedChange,
         current_global_step: int,
     ) -> tuple[bool, str]:
         """
@@ -218,7 +218,7 @@ class ScheduledChangeTimeline:
 
         return removed_count
 
-    def get_all_upcoming(self, current_global_step: int, limit: int = 100) -> list[ScheduledChange]:
+    def get_all_upcoming(self, current_global_step: int, limit: int = 100) -> list[CuedChange]:
         """
         Get all upcoming changes (target_global_step >= current).
 
@@ -229,7 +229,7 @@ class ScheduledChangeTimeline:
         Returns:
             List of changes sorted by (target_global_step, sequence_number).
         """
-        all_changes: list[ScheduledChange] = []
+        all_changes: list[CuedChange] = []
 
         for step in sorted(self._timeline.keys()):
             if step < current_global_step:

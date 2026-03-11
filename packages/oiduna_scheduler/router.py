@@ -7,7 +7,7 @@ from typing import Protocol
 from collections import defaultdict
 import logging
 
-from oiduna_scheduler.scheduler_models import ScheduledMessage
+from oiduna_scheduler.scheduler_models import ScheduleEntry
 from oiduna_scheduler.validators import OscValidator, MidiValidator
 
 logger = logging.getLogger(__name__)
@@ -85,7 +85,7 @@ class DestinationRouter:
         self._senders.pop(destination_id, None)
         self._protocols.pop(destination_id, None)
 
-    def send_messages(self, messages: List[ScheduledMessage]) -> None:
+    def send_messages(self, messages: List[ScheduleEntry]) -> None:
         """
         Send messages to their destinations.
 
@@ -111,7 +111,7 @@ class DestinationRouter:
             return
 
         # Slow path: multiple destinations - group and send
-        by_destination: Dict[str, List[ScheduledMessage]] = defaultdict(list)
+        by_destination: Dict[str, List[ScheduleEntry]] = defaultdict(list)
         for msg in messages:
             by_destination[msg.destination_id].append(msg)
 
@@ -119,7 +119,7 @@ class DestinationRouter:
         for dest_id, dest_messages in by_destination.items():
             self._send_to_destination(dest_id, dest_messages)
 
-    def _send_to_destination(self, dest_id: str, dest_messages: List[ScheduledMessage]) -> None:
+    def _send_to_destination(self, dest_id: str, dest_messages: List[ScheduleEntry]) -> None:
         """
         Send messages to a single destination with validation.
 
