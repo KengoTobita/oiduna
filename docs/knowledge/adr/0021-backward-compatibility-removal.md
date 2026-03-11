@@ -1,7 +1,7 @@
 # ADR-0021: 後方互換性の完全削除とリファクタリング
 
-**Status**: Accepted
-**Date**: 2026-03-11
+**Status**: Implemented (v3.1)
+**Date**: 2026-03-11 (Updated: 2026-03-11 for v3.1)
 **Deciders**: Claude Sonnet 4.5, tobita
 **Related**: ADR-0017 (IPC/Session Naming), ADR-0018 (Optimistic Locking)
 
@@ -11,12 +11,36 @@
 
 Oidunaプロジェクトは複数のリファクタリング段階を経て、Python 3.13固定環境に移行した。しかし、過去のバージョンとの互換性を保つための**23個の後方互換性要素**が残存し、コードベースの保守性を低下させていた。
 
-### 残存していた後方互換性要素
+### v3.1で実施した命名改善（2026-03-11）
+
+**🎯 Ubiquitous Language統一**:
+1. **Event → PatternEvent** - ドメイン層の音楽イベント明確化
+2. **SessionEventSink → SessionEventPublisher** - Pub/Sub標準化、publish()メソッド導入
+3. **IPC実装クラス名改名** - Protocol名との一致
+   - `InProcessStateSink` → `InProcessStateProducer`
+   - `NoopCommandSource` → `NoopCommandConsumer`
+   - `MockCommandSource` → `MockCommandConsumer`
+   - `MockStateSink` → `MockStateProducer`
+
+**影響範囲**:
+- コード変更: 47ファイル
+- ドキュメント更新: 13ファイル
+- テスト結果: 680 passed
+
+**コミット**:
+```
+f5344d2 refactor: rename Event to PatternEvent for clarity
+ca1ebbf refactor: rename SessionEventSink to SessionEventPublisher
+29d1197 refactor: rename IPC implementation classes to match Protocol names
+d398cc8 docs: update terminology and migration guides for v3.1 naming changes
+```
+
+### 残存していた後方互換性要素（v3.0以前）
 
 **Legacy Protocol名（最優先）**:
-- `CommandSink` / `CommandSource` (15箇所以上に影響)
-- `StateSink` / `StateSource`
-- `EventSink` alias (6箇所)
+- `CommandSink` / `CommandSource` (15箇所以上に影響) - ✅ v3.0で削除
+- `StateSink` / `StateSource` - ✅ v3.0で削除
+- `EventSink` alias (6箇所) - ✅ v3.1でSessionEventPublisherに改名
 
 **廃止予定のプロパティ**:
 - `RuntimeState.playing` setter（v2.1で非推奨化）
@@ -155,6 +179,8 @@ def _emit_track_created_event(self, track: Track) -> None:
 - **認知的負荷の削減**: 1つの明確な命名規則
 - **型安全性の向上**: Union型排除により型推論が強化
 - **テストの簡素化**: 単一パターンのみテスト
+- **Eventの曖昧性解消** (v3.1): PatternEvent、SessionEvent、SSE Eventの責任が明確化
+- **業界標準準拠** (v3.1): Pub/Subパターン（publish()）採用
 
 #### 2. 保守性の向上
 - **コードの可読性**: 冗長なaliasやコメントが消失
@@ -182,14 +208,40 @@ from oiduna_loop.ipc.protocols import CommandSource
 from oiduna_loop.ipc.protocols import CommandProducer
 ```
 
-**EventSink → SessionEventSink**:
+**Event → PatternEvent** (v3.1):
 ```python
 # 動作しなくなるコード
-from oiduna_session.managers import EventSink
-# ImportError: cannot import name 'EventSink'
+from oiduna_models import Event
+# ImportError: cannot import name 'Event'
 
 # 新しいコード
+from oiduna_models import PatternEvent
+```
+
+**SessionEventSink → SessionEventPublisher** (v3.1):
+```python
+# 動作しなくなるコード
 from oiduna_session.managers import SessionEventSink
+
+class MyPublisher:
+    def _push(self, event: dict) -> None:  # ❌ _push() は削除
+        ...
+
+# 新しいコード
+from oiduna_session.managers import SessionEventPublisher
+
+class MyPublisher:
+    def publish(self, event: dict) -> None:  # ✅ publish() を使用
+        ...
+```
+
+**IPC実装クラス名** (v3.1):
+```python
+# 動作しなくなるコード
+from oiduna_loop.ipc import InProcessStateSink, NoopCommandSource
+
+# 新しいコード
+from oiduna_loop.ipc import InProcessStateProducer, NoopCommandConsumer
 ```
 
 **RuntimeState.playing setter**:
@@ -262,18 +314,24 @@ curl -X POST /api/playback/session -H "X-Session-Version: 5"
 
 ### 実装結果
 
-| Metric | Before | After | Change |
+| Metric | Before (v2.x) | After (v3.1) | Change |
 |--------|--------|-------|--------|
 | 後方互換性要素 | 23個 | 0個 | -23 ✅ |
 | Legacy protocol定義 | ~200行 | 0行 | -200行 |
-| テスト合格 | ~597 | 700 | +103 |
+| テスト合格 | ~597 | 680 | +83 |
 | 型安全性 | 95% | 95% | 維持 |
 | キャッシュサイズ | ~46MB | 0 | クリーン |
+| Event曖昧性 | 3つの意味 | 明確に分離 | 解消 ✅ |
 
-**作成されたコミット**:
-1. `d020219` - Phase 2: 影響ゼロの後方互換性削除
-2. `a645673` - Phase 3: Legacy IPC protocol名の削除
-3. `bc45183` - Phase 4 & 5: 残りの後方互換性削除 + Extract Method
+**v3.0コミット** (Protocol削除):
+1. `217c896` - docs: update migration guides for v3.0 breaking changes
+2. (Protocol定義削除は既に完了)
+
+**v3.1コミット** (命名統一):
+1. `f5344d2` - refactor: rename Event to PatternEvent for clarity
+2. `ca1ebbf` - refactor: rename SessionEventSink to SessionEventPublisher
+3. `29d1197` - refactor: rename IPC implementation classes to match Protocol names
+4. `d398cc8` - docs: update terminology and migration guides for v3.1 naming changes
 
 ---
 
@@ -349,7 +407,15 @@ git revert <commit-hash>
 
 ---
 
-**最終更新**: 2026-03-11
+**最終更新**: 2026-03-11 (v3.1)
 **実装者**: Claude Sonnet 4.5
 **レビュー**: tobita
-**ステータス**: ✅ 完全実装済み（700テスト合格、92%カバレッジ維持）
+**ステータス**: ✅ v3.1完全実装済み（680テスト合格、92%カバレッジ維持）
+
+### v3.1で達成したこと
+
+1. ✅ **Eventの曖昧性解消**: PatternEvent、SessionEvent、SSE Eventの責任を明確化
+2. ✅ **Pub/Sub標準化**: SessionEventPublisher.publish()で業界標準準拠
+3. ✅ **実装クラス名統一**: IPC実装クラス名がProtocol名と一致
+4. ✅ **完全な後方互換性削除**: v3.1では旧名は一切使用不可
+5. ✅ **ドキュメント完全更新**: 13ファイルの移行ガイド更新

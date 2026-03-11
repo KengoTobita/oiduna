@@ -2,7 +2,7 @@
 
 ## Status
 
-**Accepted** - 2026-03-02
+**Implemented (v3.1)** - 2026-03-02 (Updated: 2026-03-11 for v3.1)
 
 ## Context
 
@@ -27,25 +27,29 @@ class LoopEngine:
 - 変数名が`publisher`なのに、型は`StateSink`
 - データフローの方向と命名が直感的に一致しない
 
-### 問題2: EventSink vs StateSinkの混同
+### 問題2: Event用語の曖昧性（3つの異なる意味）
 
 ```python
-# 異なるレイヤーで似た名前
+# 「Event」が3つの異なる意味で使われている
 
-【EventSink】 - Session層のCRUD イベント
+【Event】 - ドメイン層の音楽イベント（v3.1でPatternEventに改名）
+定義: oiduna_models/events.py
+用途: Pattern内の音（step, cycle, params）
+
+【EventSink → SessionEventPublisher】 - Session層のCRUD通知（v3.1で改名）
 定義: oiduna_session/managers/base.py
 用途: track_created, pattern_updated 等
 
-【StateSink】 - Loop層の状態配信
+【StateSink → StateProducer】 - Loop層の状態配信（v3.0で改名）
 定義: oiduna_loop/ipc/protocols.py
 用途: position, status, error 等
 ```
 
 **問題点**:
-- 両方とも「イベント/状態」を扱うが、**異なるレイヤー**
+- 「Event」が3つの異なるレイヤーで異なる意味を持つ
 - `EventSink`と`StateSink`という名前が似ている
 - どちらがどの責任を持つか不明確
-- InProcessStateProducerが両方のProtocolを実装することで混乱が増す
+- InProcessStateProducer が複数のProtocolを実装することで混乱が増す
 
 ## Decision
 
@@ -80,23 +84,25 @@ class LoopEngine:
         self._state_producer = state_producer
 ```
 
-### 決定2: Session層をSessionEventSinkに明確化
+### 決定2: Session層をSessionEventPublisherに明確化（v3.1更新）
 
-**新しい命名**:
+**命名の変遷**:
 
-| 旧名 | 新名 | レイヤー | 責任 |
-|-----|------|---------|------|
-| `EventSink` | `SessionEventSink` | Session層 | CRUD操作イベント配信 |
+| バージョン | 旧名 | 新名 | メソッド | レイヤー | 責任 |
+|-----------|------|------|---------|---------|------|
+| v2.1 | `EventSink` | `SessionEventSink` | `_push()` | Session層 | CRUD操作イベント配信 |
+| **v3.1** | `SessionEventSink` | **`SessionEventPublisher`** | **`publish()`** | Session層 | CRUD操作イベント配信 |
 
-**実装例**:
+**v3.1実装例**:
 ```python
-class SessionEventSink(Protocol):
+class SessionEventPublisher(Protocol):
     """
-    Session層のCRUDイベント配信Protocol.
+    Session層のCRUDイベント発行Protocol（v3.1）.
 
     Loop層のStateProducerとは異なる責任を持つ。
+    業界標準のPub/Subパターンに準拠。
     """
-    def _push(self, event: dict[str, Any]) -> None: ...
+    def publish(self, event: dict[str, Any]) -> None: ...
 
 # Legacy alias
 EventSink = SessionEventSink
@@ -286,6 +292,101 @@ StatePublisher / StateSubscriber
 
 ---
 
+## v3.1 Update (2026-03-11)
+
+### 決定3: Eventの曖昧性解消とSessionEventPublisher改名
+
+**v3.1で実施した追加の命名改善**:
+
+#### 1. Event → PatternEvent（ドメイン層明確化）
+
+**問題**: 「Event」が3つの異なる意味で使われていた
+- ドメイン層: Pattern内の音楽イベント
+- Session層: CRUD操作通知（SessionEvent）
+- HTTP層: Server-Sent Events（SSE Event）
+
+**解決**:
+```python
+# 旧名
+from oiduna_models import Event
+
+# 新名（v3.1）
+from oiduna_models import PatternEvent
+```
+
+**メリット**:
+- PatternEvent、SessionEvent、SSE Eventの責任が明確
+- Ubiquitous Language（DDD）準拠
+- ドメインモデルの意図が型名から理解できる
+
+#### 2. SessionEventSink → SessionEventPublisher（Pub/Sub標準化）
+
+**問題**:
+- `_push()`という内部メソッド名が業界標準でない
+- 「Sink」という名前が「Producer」との対応が不明確
+
+**解決**:
+```python
+# v2.1-v3.0
+class SessionEventSink(Protocol):
+    def _push(self, event: dict) -> None: ...
+
+# v3.1
+class SessionEventPublisher(Protocol):
+    def publish(self, event: dict) -> None: ...
+```
+
+**メリット**:
+- Pub/Subパターン業界標準に準拠（publish/subscribe）
+- メソッド名が公開API（privateでない）
+- Loop層のStateProducerとの対応が明確
+
+#### 3. IPC実装クラス名統一
+
+**問題**: 実装クラス名がProtocol名と不一致
+
+**解決**:
+```python
+# 旧名
+InProcessStateSink → InProcessStateProducer
+NoopCommandSource → NoopCommandConsumer
+MockCommandSource → MockCommandConsumer
+MockStateSink → MockStateProducer
+```
+
+**メリット**:
+- Protocol名と実装クラス名が一致
+- docstringの説明と型名が一貫
+
+### v3.1実装結果
+
+| 項目 | 変更内容 |
+|------|---------|
+| 改名クラス | 7個（PatternEvent, SessionEventPublisher, IPC実装4個） |
+| 変更ファイル | 47ファイル |
+| ドキュメント更新 | 13ファイル |
+| テスト結果 | 680 passed |
+| 後方互換性 | 完全削除（旧名は使用不可） |
+
+### v3.1コミット
+
+```
+f5344d2 refactor: rename Event to PatternEvent for clarity
+ca1ebbf refactor: rename SessionEventSink to SessionEventPublisher
+29d1197 refactor: rename IPC implementation classes to match Protocol names
+d398cc8 docs: update terminology and migration guides for v3.1 naming changes
+```
+
+### 更新された命名原則（v3.1）
+
+1. **Producer/Consumerパターン**: IPC層の標準命名
+2. **Publisher/Subscriberパターン**: Session層のイベント配信
+3. **レイヤー接頭辞**: PatternEvent, SessionEvent等で明確化
+4. **直感的な命名**: 変数名と型名を一致させ、データフローを明示
+5. **業界標準準拠**: Pub/Sub、Producer/Consumer等の確立されたパターン使用
+
+---
+
 **記録者**: Claude Sonnet 4.5
-**承認日**: 2026-03-02
-**実装バージョン**: v2.1
+**承認日**: 2026-03-02 (v2.1), 2026-03-11 (v3.1 update)
+**実装バージョン**: v2.1 (IPC), v3.1 (Event/Publisher)
