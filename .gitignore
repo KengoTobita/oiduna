@@ -27,9 +27,16 @@ env/
 .coverage
 htmlcov/
 .tox/
+.mypy_cache/
+.ruff_cache/
 
 # Oiduna data directory
 oiduna_data/
+
+# Project specific
+config.yaml
+!destinations.yaml  # Keep sample
+samples/
 
 # OS
 .DS_Store

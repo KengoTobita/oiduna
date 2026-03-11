@@ -1,7 +1,7 @@
 # Oiduna: コンセプトと設計哲学
 
 **作成日**: 2026-02-27
-**バージョン**: 2.0.0 (ScheduledMessageBatch統合版)
+**バージョン**: 2.1.0 (Timing Model追加版)
 **対象**: Oiduna開発者・利用者
 
 ## 目次
@@ -10,6 +10,7 @@
 2. [設計哲学](#設計哲学)
 3. [アーキテクチャの進化](#アーキテクチャの進化)
 4. [核となるコンセプト](#核となるコンセプト)
+   - 6. [Timing Model（タイミングモデル）](#6-timing-modelタイミングモデル)
 5. [パフォーマンス設計](#パフォーマンス設計)
 
 ---
@@ -357,6 +358,151 @@ class OrbitMapperExtension:
         # track_idからorbitを計算してparamsに追加
         return modified_batch
 ```
+
+### 6. Timing Model（タイミングモデル）
+
+**役割**: Oidunaの時間・タイミング管理の基本仕様
+
+#### 固定ループ長の設計思想
+
+Oidunaは**256ステップ固定ループ**を採用しています。これは変更できないコアアーキテクチャです。
+
+```python
+# packages/oiduna_loop/engine/loop_engine.py:23
+LOOP_STEPS = 256  # 固定値（変更不可）
+```
+
+**なぜ256ステップなのか**:
+- **2の累乗**: ビット演算での最適化が可能（256 = 2^8）
+- **音楽的に自然**: 16ビート = 4小節 = 典型的なループ長
+- **TidalCycles互換**: 4.0サイクル = 4小節
+
+#### 時間単位の正確な関係式
+
+```
+1 step    = 1/16 note (16分音符)
+4 steps   = 1 beat (4分音符、1拍)
+16 steps  = 1 bar (1小節、4拍)
+64 steps  = 4 bars
+256 steps = 16 beats = 4 bars = 1 loop = 4.0 cycles
+```
+
+**図解**:
+```
+Loop (256 steps = 4.0 cycles)
+├─ Bar 0 (0-15 steps = 0.0-0.999... cycles)
+│  ├─ Beat 0 (0-3 steps)
+│  ├─ Beat 1 (4-7 steps)
+│  ├─ Beat 2 (8-11 steps)
+│  └─ Beat 3 (12-15 steps)
+├─ Bar 1 (16-31 steps = 1.0-1.999... cycles)
+├─ Bar 2 (32-47 steps = 2.0-2.999... cycles)
+└─ Bar 3 (48-63 steps = 3.0-3.999... cycles)
+... 繰り返し（64-255 steps）
+```
+
+#### step（整数）vs cycle（浮動小数点）
+
+PatternEventとScheduledMessageは**両方の表現**を持ちます:
+
+```python
+@dataclass
+class PatternEvent:
+    step: int        # 0-255（量子化されたステップ番号）
+    cycle: float     # 0.0-4.0（精密なタイミング）
+    params: dict[str, Any]
+```
+
+**使い分け**:
+- **step**: MessageSchedulerのインデックスに使用（O(1)検索のため整数が必須）
+- **cycle**: TidalCycles互換性と精密なタイミング表現（小数点以下の位置）
+
+**変換式**:
+```python
+cycle = (step / 256.0) * 4.0  # step → cycle
+step = int((cycle / 4.0) * 256)  # cycle → step (量子化)
+```
+
+**例**:
+| step | cycle | 意味 |
+|------|-------|------|
+| 0 | 0.0 | ループ開始 |
+| 16 | 0.25 | 1拍目の終わり（= 0.25サイクル） |
+| 64 | 1.0 | 1小節目の終わり（= 1.0サイクル） |
+| 128 | 2.0 | 2小節目の終わり |
+| 255 | 3.996... | ループの最後 |
+
+#### BPMと時間の関係
+
+**基本公式**:
+```python
+秒/beat = 60.0 / BPM
+秒/step = (60.0 / BPM) / 4  # 1 beat = 4 steps
+秒/loop = (60.0 / BPM) * 16  # 1 loop = 16 beats
+```
+
+**時間換算表**:
+| BPM | 秒/step | 秒/beat | 秒/loop |
+|-----|---------|---------|---------|
+| 60 | 250ms | 1000ms | 16秒 |
+| 120 | 125ms | 500ms | 8秒 |
+| 140 | 107ms | 428ms | 6.86秒 |
+| 180 | 83ms | 333ms | 5.33秒 |
+
+**リアルタイム制約**:
+- 120 BPM → **125ms/step**
+- この時間内に以下を完了:
+  1. メッセージ取得（MessageScheduler）
+  2. Mute/Soloフィルタリング（RuntimeState）
+  3. 送信先別振り分け（DestinationRouter）
+  4. OSC/MIDI送信（DestinationSender）
+- **目標**: < 50ms（余裕を持たせるため）
+
+#### Position（位置情報）
+
+RuntimeStateは現在位置を以下の形式で管理:
+
+```python
+@dataclass
+class Position:
+    step: int    # 0-255（現在のステップ）
+    beat: int    # 0-15（現在のビート）
+    bar: int     # 0-3（現在の小節）
+    cycle: float # 0.0-4.0（現在のサイクル位置）
+```
+
+**position_update_interval**（位置更新通知の頻度）:
+- `"beat"`: 4ステップごと（1ビートごと）に位置更新をSSE配信
+- `"bar"`: 16ステップごと（1小節ごと）に位置更新をSSE配信
+
+**トレードオフ**:
+- `"beat"`: 高頻度更新（滑らかなUI）、ネットワーク負荷大
+- `"bar"`: 低頻度更新（軽量）、更新が粗い
+
+**デフォルト**: `"beat"`（packages/oiduna_models/environment.py:14）
+
+#### タイミング精度の保証
+
+**Clock Generator**:
+- `packages/oiduna_loop/engine/clock_generator.py`
+- asyncio + 高精度タイマーによるドリフト補正
+
+**ドリフト補正パラメータ**:
+```python
+DRIFT_RESET_THRESHOLD_MS = 50  # 50ms以上のズレで強制リセット
+DRIFT_WARNING_THRESHOLD_MS = 20  # 20ms以上で警告ログ
+```
+
+**設計思想**:
+- **ドリフト検出**: 累積誤差を毎ステップ測定
+- **段階的補正**: 小さなズレは次ステップで吸収
+- **強制リセット**: 大きなズレ（50ms超）は即座にリセット
+
+**コード参照**:
+- `packages/oiduna_models/events.py:10-11` - PatternEvent (step/cycle)
+- `packages/oiduna_loop/engine/loop_engine.py:23` - LOOP_STEPS定数
+- `packages/oiduna_loop/engine/clock_generator.py:15-17` - ドリフト補正
+- `packages/oiduna_models/environment.py:14` - position_update_interval
 
 ---
 

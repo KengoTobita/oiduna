@@ -1,8 +1,22 @@
 [project]
 name = "oiduna"
-version = "0.1.0"
+version = "1.0.0"
 description = "Real-time SuperDirt/MIDI loop engine with HTTP API"
+readme = "README.md"
 requires-python = ">=3.13,<3.14"
+license = "MIT"
+authors = [
+    {name = "Kengo Tobita", email = "kengo.tobita@example.com"}
+]
+keywords = ["music", "live-coding", "superdirt", "midi", "loop-engine"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Sound/Audio",
+]
 dependencies = [
     "fastapi>=0.112.0",
     "uvicorn>=0.30.0",
@@ -16,13 +30,28 @@ dependencies = [
     "pyyaml>=6.0.3",
 ]
 
+[project.urls]
+Homepage = "https://github.com/KengoTobita/oiduna"
+Documentation = "https://github.com/KengoTobita/oiduna/blob/main/README.md"
+Repository = "https://github.com/KengoTobita/oiduna"
+Issues = "https://github.com/KengoTobita/oiduna/issues"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"oiduna" = "src"}
+packages = ["oiduna"]
+
 [tool.uv]
-package = false
+package = true
 
 [tool.mypy]
 python_version = "3.13"
 warn_return_any = true
 warn_unused_ignores = true
+strict = true
 
 [tool.ruff]
 target-version = "py313"
@@ -31,11 +60,6 @@ line-length = 100
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-pythonpath = [
-    "packages/oiduna_api",
-    "packages/oiduna_loop",
-    "packages/oiduna_scheduler",
-]
 
 [dependency-groups]
 dev = [
