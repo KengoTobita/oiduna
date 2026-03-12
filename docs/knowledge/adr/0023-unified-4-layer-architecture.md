@@ -118,10 +118,11 @@ src/oiduna/
 
 ### Negative
 
-1. **Breaking Change**
+1. **Breaking Change（意図的）**
    - 全てのインポートパスが変更
    - v0.x → v1.0のメジャーバージョンアップ
-   - ユーザーはMIGRATION_GUIDE.mdを参照して移行が必要
+   - v1.0を初回公開として扱うため、後方互換性は考慮しない
+   - MIGRATION_GUIDE.mdは作成せず、クリーンスタート
 
 2. **初期学習コスト**
    - 既存開発者が新構造を学習する必要
@@ -131,21 +132,29 @@ src/oiduna/
    - 移行中にバグが発生する可能性
    - 広範囲なテストが必要
 
+4. **最小限のガバナンス**
+   - CONTRIBUTING.mdを削除（小規模チーム想定）
+   - CHANGELOGを削除（初回公開）
+   - 必要に応じて将来追加
+
 ### Mitigation
 
 1. **包括的なドキュメント**
    - ✅ ARCHITECTURE.md - 4層アーキテクチャ説明
-   - ✅ MIGRATION_GUIDE.md - v0.x → v1.0移行ガイド
-   - ✅ README.md更新
+   - ✅ README.md - v1.0向けに更新
+   - ✅ docs/ - 13の技術ドキュメント
+   - ✅ docs/knowledge/adr/ - 23のアーキテクチャ決定記録
 
 2. **テスト体制**
    - ✅ 370テストすべてが成功
    - ✅ 52%のコードカバレッジ維持
    - ✅ ドメイン層 >90%カバレッジ
 
-3. **段階的リリース**
+3. **クリーンな初回リリース**
+   - v1.0を真の初回公開として扱う
+   - 後方互換性の負債なし
+   - 必要最小限のドキュメントでスタート
    - feature/4-layer-architecture-v1.0ブランチで開発
-   - mainブランチマージ前に十分なレビュー
 
 ---
 
@@ -177,13 +186,24 @@ src/oiduna/
    - 全テスト成功確認
    - 2コミット作成
 
+6. **Phase 9: クリーンアップとOSS最適化**
+   - キャッシュ・中間ファイル削除（31MB）
+   - 一時レポート削除（6ファイル）
+   - docs/archive/削除（20ファイル）
+   - 不要なルートドキュメント削除：
+     - MIGRATION_GUIDE.md（v1.0が初回リリース）
+     - CHANGELOG.md（初回公開には不要）
+     - CONTRIBUTING.md（小規模チーム想定）
+   - 最終構成：ルート2つのMarkdown（README, ARCHITECTURE）
+
 ### 統計
 
-- **変更ファイル数**: 268ファイル
-- **追加行数**: 4067行
-- **削除行数**: 9302行
+- **移行作業**: 268ファイル変更、4067行追加、9302行削除
+- **クリーンアップ**: 23ファイル削除、9170行削減
+- **最終ファイル数**: Markdown 65個（88→65）
 - **テスト数**: 370成功、8スキップ
 - **パッケージサイズ**: 139KB (wheel), 97KB (tarball)
+- **リポジトリサイズ**: 4.1MB（.venv/.git除く）
 
 ---
 
@@ -194,7 +214,7 @@ src/oiduna/
 - ADR-0012: Package Architecture Layered Design
 - ADR-0014: Merge Destination into Models
 - ARCHITECTURE.md: 4-Layer Architecture Documentation
-- MIGRATION_GUIDE.md: v0.x → v1.0 Migration Guide
+- docs/: 13 Technical Documentation Files
 
 ---
 
@@ -204,8 +224,18 @@ src/oiduna/
 
 将来的にマイクロサービス化する必要が生じた場合、この明確な層分離により、各層を独立したサービスとして切り出すことが容易になる。
 
+### OSS公開最適化
+
+v1.0を**真の初回公開**として扱う方針を採用：
+- 後方互換性ドキュメント（MIGRATION_GUIDE）を削除
+- 開発履歴ドキュメント（docs/archive/）を削除
+- ガバナンスドキュメント（CONTRIBUTING, CHANGELOG）を削除
+- ルートディレクトリを最小限に（README, ARCHITECTURE, LICENSE のみ）
+
+これにより、新規ユーザーが混乱せず、プロジェクトの現状に集中できる。必要に応じて将来的にCONTRIBUTING.mdやCHANGELOG.mdは追加可能。
+
 ---
 
 **Version:** 1.0.0
 **Status:** Production Ready
-**Last Updated:** 2026-03-11
+**Last Updated:** 2026-03-12
