@@ -8,6 +8,7 @@ Multiple patterns can be active simultaneously on a single track.
 from typing import Annotated
 from pydantic import BaseModel, Field, field_validator
 from .events import PatternEvent
+from .validators import validate_hexadecimal_id
 
 
 class Pattern(BaseModel):
@@ -61,7 +62,7 @@ class Pattern(BaseModel):
     # Mutable fields
     active: bool = Field(
         default=True,
-        description="Whether this pattern is currently active (演奏ON/OFF)"
+        description="Whether this pattern is currently active (playback ON/OFF)"
     )
     archived: bool = Field(
         default=False,
@@ -87,12 +88,7 @@ class Pattern(BaseModel):
         Raises:
             ValueError: If pattern_id is not 4-digit hexadecimal
         """
-        if not (len(v) == 4 and all(c in "0123456789abcdef" for c in v)):
-            raise ValueError(
-                f"pattern_id must be 4-digit hexadecimal (e.g., '3e2b'). "
-                f"Got: '{v}'"
-            )
-        return v
+        return validate_hexadecimal_id(v, length=4, field_name="pattern_id")
 
     @field_validator("track_id")
     @classmethod
@@ -109,12 +105,7 @@ class Pattern(BaseModel):
         Raises:
             ValueError: If track_id is not 4-digit hexadecimal
         """
-        if not (len(v) == 4 and all(c in "0123456789abcdef" for c in v)):
-            raise ValueError(
-                f"track_id must be 4-digit hexadecimal (e.g., '0a1f'). "
-                f"Got: '{v}'"
-            )
-        return v
+        return validate_hexadecimal_id(v, length=4, field_name="track_id")
 
     model_config = {
         "json_schema_extra": {

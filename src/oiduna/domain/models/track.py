@@ -8,6 +8,7 @@ to all events in their patterns.
 from typing import Any
 from pydantic import BaseModel, Field, field_validator
 from .pattern import Pattern
+from .validators import validate_hexadecimal_id
 
 
 class Track(BaseModel):
@@ -86,12 +87,7 @@ class Track(BaseModel):
         Raises:
             ValueError: If track_id is not 4-digit hexadecimal
         """
-        if not (len(v) == 4 and all(c in "0123456789abcdef" for c in v)):
-            raise ValueError(
-                f"track_id must be 4-digit hexadecimal (e.g., '0a1f'). "
-                f"Got: '{v}'"
-            )
-        return v
+        return validate_hexadecimal_id(v, length=4, field_name="track_id")
 
     @field_validator("destination_id")
     @classmethod

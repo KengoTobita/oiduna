@@ -1,4 +1,4 @@
-"""SessionContainer - 軽量なマネージャーコンテナ."""
+"""SessionContainer - Lightweight manager container."""
 
 from typing import Optional
 from oiduna.domain.models import Session
@@ -13,10 +13,10 @@ from .managers.timeline_manager import TimelineManager
 
 class SessionContainer:
     """
-    軽量なマネージャーコンテナ.
+    Lightweight manager container.
 
-    各マネージャーを直接公開し、委譲レイヤーを持たない。
-    APIからは container.clients.create() のように直接アクセスする。
+    Exposes each manager directly without delegation layers.
+    API accesses them directly like container.clients.create().
 
     Example:
         >>> container = SessionContainer()
@@ -27,7 +27,7 @@ class SessionContainer:
 
     def __init__(self, change_publisher: Optional[SessionChangePublisher] = None) -> None:
         """
-        SessionContainerの初期化.
+        Initialize SessionContainer.
 
         Args:
             change_publisher: Optional session change publisher for SSE change notifications.
@@ -36,8 +36,8 @@ class SessionContainer:
         self.session = Session()
         self.change_publisher = change_publisher
 
-        # 各マネージャーを直接公開（委譲なし）
-        # Session単位のIDGeneratorを使用
+        # Expose each manager directly (no delegation)
+        # Use Session-scoped IDGenerator
         self.clients = ClientManager(self.session, change_publisher)
         self.destinations = DestinationManager(self.session, change_publisher)
         self.tracks = TrackManager(
@@ -58,11 +58,11 @@ class SessionContainer:
         self.timeline = TimelineManager(self.session, change_publisher)
 
     def reset(self) -> None:
-        """セッションを空の状態にリセット（admin操作）."""
+        """Reset session to empty state (admin operation)."""
         self.session = Session()
-        # Session作成時に新しい _id_generator が自動作成される
+        # New _id_generator is automatically created when Session is created
 
-        # 全マネージャーを新しいセッションで再初期化
+        # Reinitialize all managers with new session
         self.clients.session = self.session
         self.destinations.session = self.session
         self.tracks.session = self.session
@@ -73,5 +73,5 @@ class SessionContainer:
         self.timeline = TimelineManager(self.session, self.change_publisher)
 
     def get_state(self) -> Session:
-        """完全なセッション状態を取得."""
+        """Get complete session state."""
         return self.session

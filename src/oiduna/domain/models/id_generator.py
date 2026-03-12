@@ -28,9 +28,48 @@ class IDGenerator:
     """
 
     def __init__(self) -> None:
-        # Session内で一意性を保証
+        # Ensures uniqueness within session
         self._track_ids: Set[str] = set()
         self._pattern_ids: Set[str] = set()
+
+    def _generate_unique_id(
+        self,
+        id_pool: Set[str],
+        id_type: str,
+        byte_length: int = 2
+    ) -> str:
+        """
+        Generate a unique hexadecimal ID with collision detection.
+
+        Template Method: Defines the algorithm skeleton for ID generation,
+        with specific ID pools and types passed as parameters.
+
+        Args:
+            id_pool: Set to check for uniqueness and store generated IDs
+            id_type: Type of ID for error messages (e.g., 'track_id', 'pattern_id')
+            byte_length: Number of bytes (2 bytes = 4 hex chars, 4 bytes = 8 hex chars)
+
+        Returns:
+            Unique hexadecimal ID string
+
+        Raises:
+            RuntimeError: If unable to generate unique ID after max attempts
+
+        Example:
+            >>> gen = IDGenerator()
+            >>> id = gen._generate_unique_id(gen._track_ids, "track_id")
+            >>> len(id)
+            4
+        """
+        max_attempts = 100
+        for _ in range(max_attempts):
+            new_id = secrets.token_hex(byte_length)
+            if new_id not in id_pool:
+                id_pool.add(new_id)
+                return new_id
+        raise RuntimeError(
+            f"Failed to generate unique {id_type} after {max_attempts} attempts"
+        )
 
     def generate_track_id(self) -> str:
         """
@@ -42,13 +81,7 @@ class IDGenerator:
         Raises:
             RuntimeError: If unable to generate unique ID after 100 attempts
         """
-        max_attempts = 100
-        for _ in range(max_attempts):
-            new_id = secrets.token_hex(2)  # 4-digit hex (2 bytes = 4 hex chars)
-            if new_id not in self._track_ids:
-                self._track_ids.add(new_id)
-                return new_id
-        raise RuntimeError(f"Failed to generate unique track_id after {max_attempts} attempts")
+        return self._generate_unique_id(self._track_ids, "track_id")
 
     def generate_pattern_id(self) -> str:
         """
@@ -60,13 +93,7 @@ class IDGenerator:
         Raises:
             RuntimeError: If unable to generate unique ID after 100 attempts
         """
-        max_attempts = 100
-        for _ in range(max_attempts):
-            new_id = secrets.token_hex(2)  # 4-digit hex (2 bytes = 4 hex chars)
-            if new_id not in self._pattern_ids:
-                self._pattern_ids.add(new_id)
-                return new_id
-        raise RuntimeError(f"Failed to generate unique pattern_id after {max_attempts} attempts")
+        return self._generate_unique_id(self._pattern_ids, "pattern_id")
 
     def reset(self) -> None:
         """Reset all ID pools (for testing)."""
