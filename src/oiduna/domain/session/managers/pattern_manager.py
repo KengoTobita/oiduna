@@ -47,7 +47,7 @@ class PatternManager(BaseManager):
         client_id: str,
         active: bool = True,
         events: Optional[list[PatternEvent]] = None,
-    ) -> Optional[Pattern]:
+    ) -> Pattern:
         """
         Create a new pattern in a track with server-generated ID.
 
@@ -59,25 +59,23 @@ class PatternManager(BaseManager):
             events: Initial events
 
         Returns:
-            Created Pattern with server-generated pattern_id, or None if track not found
+            Created Pattern with server-generated pattern_id
 
         Raises:
-            ValueError: If validation fails
+            ValueError: If validation fails (track not found or client doesn't exist)
         """
         track = self._validate_pattern_creation(track_id, client_id)
-        if track is None:
-            return None
 
         pattern = self._build_pattern(track_id, pattern_name, client_id, active, events)
         self._register_pattern(track, pattern)
         self._emit_pattern_created_event(pattern)
         return pattern
 
-    def _validate_pattern_creation(self, track_id: str, client_id: str) -> Optional[Track]:
+    def _validate_pattern_creation(self, track_id: str, client_id: str) -> Track:
         """Validate that track and client exist."""
         track = self.session.tracks.get(track_id)
         if track is None:
-            return None
+            raise ValueError(f"Track '{track_id}' not found")
         if client_id not in self.session.clients:
             raise ValueError(f"Client {client_id} does not exist")
         return track

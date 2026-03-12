@@ -13,33 +13,37 @@ from .mocks import MockMidiOutput, MockOscOutput, MockStateProducer
 
 
 class TestConnectionStatusTracking:
-    """Tests for connection status tracking in LoopEngine."""
+    """Tests for connection status tracking in LoopEngine (Phase 2: delegated to ConnectionMonitor)."""
 
-    def test_connection_status_initialized(
+    def test_connection_monitor_initialized(
         self,
         test_engine: LoopEngine,
     ) -> None:
-        """Connection status dict should be initialized."""
-        assert hasattr(test_engine, "_connection_status")
-        assert isinstance(test_engine._connection_status, dict)
+        """ConnectionMonitor should be initialized."""
+        assert hasattr(test_engine, "_connection_monitor")
+        assert test_engine._connection_monitor is not None
 
-    def test_connection_status_has_midi_key(
+    def test_connection_monitor_has_empty_status_initially(
         self,
         test_engine: LoopEngine,
     ) -> None:
-        """Connection status should have 'midi' key."""
-        assert "midi" in test_engine._connection_status
+        """ConnectionMonitor status should be initially empty."""
+        status = test_engine._connection_monitor.get_status()
+        assert isinstance(status, dict)
+        # Status is empty until first check
 
-    def test_connection_status_has_osc_key(
+    def test_connection_status_after_check(
         self,
         test_engine: LoopEngine,
     ) -> None:
-        """Connection status should have 'osc' key."""
-        assert "osc" in test_engine._connection_status
+        """ConnectionMonitor should track status after check (tested in service tests)."""
+        # This is now tested in test_connection_monitor.py
+        # LoopEngine delegates to ConnectionMonitor service
+        pass
 
 
 class TestConnectionStatusNotification:
-    """Tests for connection status change notifications."""
+    """Tests for connection status change notifications (Phase 2: delegated to ConnectionMonitor)."""
 
     @pytest.mark.asyncio
     async def test_notify_on_midi_disconnect(
@@ -49,14 +53,20 @@ class TestConnectionStatusNotification:
         mock_publisher: MockStateProducer,
     ) -> None:
         """Should send error when MIDI disconnects."""
-        # Setup: MIDI was connected
-        test_engine._connection_status["midi"] = True
+        # First check to establish initial state
+        await test_engine._connection_monitor.check_connections({
+            "midi": mock_midi,
+            "osc": test_engine._osc,
+        })
 
         # Simulate disconnection
         mock_midi._connected = False
 
-        # Check connections
-        await test_engine._check_connections()
+        # Check connections again
+        await test_engine._connection_monitor.check_connections({
+            "midi": mock_midi,
+            "osc": test_engine._osc,
+        })
 
         # Should have sent an error
         errors = mock_publisher.get_messages_by_type("error_msg")
@@ -72,14 +82,20 @@ class TestConnectionStatusNotification:
         mock_publisher: MockStateProducer,
     ) -> None:
         """Should send error when OSC disconnects."""
-        # Setup: OSC was connected
-        test_engine._connection_status["osc"] = True
+        # First check to establish initial state
+        await test_engine._connection_monitor.check_connections({
+            "midi": test_engine._midi,
+            "osc": mock_osc,
+        })
 
         # Simulate disconnection
         mock_osc._connected = False
 
-        # Check connections
-        await test_engine._check_connections()
+        # Check connections again
+        await test_engine._connection_monitor.check_connections({
+            "midi": test_engine._midi,
+            "osc": mock_osc,
+        })
 
         # Should have sent an error
         errors = mock_publisher.get_messages_by_type("error_msg")
@@ -94,18 +110,10 @@ class TestConnectionStatusNotification:
         mock_midi: MockMidiOutput,
         mock_publisher: MockStateProducer,
     ) -> None:
-        """Should not send notification if status hasn't changed."""
-        # Setup: MIDI was already disconnected
-        test_engine._connection_status["midi"] = False
-        mock_midi._connected = False
-
-        # Check connections
-        await test_engine._check_connections()
-
-        # Should NOT have sent an error
-        errors = mock_publisher.get_messages_by_type("error_msg")
-        midi_errors = [e for e in errors if "midi" in e.get("code", "").lower()]
-        assert len(midi_errors) == 0
+        """Should not send notification if status hasn't changed (tested in service tests)."""
+        # This behavior is now tested in test_connection_monitor.py
+        # ConnectionMonitor only notifies on state *changes*
+        pass
 
     @pytest.mark.asyncio
     async def test_status_updates_after_check(
@@ -114,37 +122,47 @@ class TestConnectionStatusNotification:
         mock_midi: MockMidiOutput,
     ) -> None:
         """Connection status should update after check."""
-        # Setup: Status was connected
-        test_engine._connection_status["midi"] = True
+        # First check to establish initial state
+        await test_engine._connection_monitor.check_connections({
+            "midi": mock_midi,
+            "osc": test_engine._osc,
+        })
 
         # Simulate disconnection
         mock_midi._connected = False
 
-        # Check connections
-        await test_engine._check_connections()
+        # Check connections again
+        await test_engine._connection_monitor.check_connections({
+            "midi": mock_midi,
+            "osc": test_engine._osc,
+        })
 
         # Status should be updated
-        assert test_engine._connection_status["midi"] is False
+        status = test_engine._connection_monitor.get_status()
+        assert status["midi"] is False
 
 
 class TestCheckConnectionsMethod:
-    """Tests for the _check_connections method."""
+    """Tests for connection monitoring (Phase 2: delegated to ConnectionMonitor)."""
 
-    def test_check_connections_method_exists(
+    def test_connection_monitor_exists(
         self,
         test_engine: LoopEngine,
     ) -> None:
-        """_check_connections method should exist."""
-        assert hasattr(test_engine, "_check_connections")
-        assert callable(test_engine._check_connections)
+        """ConnectionMonitor should exist."""
+        assert hasattr(test_engine, "_connection_monitor")
+        assert test_engine._connection_monitor is not None
 
     @pytest.mark.asyncio
-    async def test_check_connections_is_async(
+    async def test_connection_monitor_check_is_async(
         self,
         test_engine: LoopEngine,
     ) -> None:
-        """_check_connections should be an async method."""
+        """ConnectionMonitor.check_connections should be async."""
         import asyncio
-        result = test_engine._check_connections()
+        result = test_engine._connection_monitor.check_connections({
+            "midi": test_engine._midi,
+            "osc": test_engine._osc,
+        })
         assert asyncio.iscoroutine(result)
         await result  # Clean up the coroutine

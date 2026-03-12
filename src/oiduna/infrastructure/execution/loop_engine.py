@@ -9,9 +9,11 @@ Main loop engine that orchestrates:
 - In-process IPC with oiduna_api
 
 Refactored using Martin Fowler patterns:
-- Extract Class: NoteScheduler, ClockGenerator
+- Extract Class: NoteScheduler, ClockGenerator, DriftCorrector, ConnectionMonitor, HeartbeatService
 - Single Responsibility Principle
 - Dependency Injection: Protocol-based DI for testability
+
+Phase 2: Extracted services for drift correction, connection monitoring, and heartbeat.
 """
 
 from __future__ import annotations
@@ -50,6 +52,8 @@ from .clock_generator import ClockGenerator
 from .command_handler import CommandHandler
 from .note_scheduler import NoteScheduler
 from .session_loader import SessionLoader
+# Phase 2: Extracted services
+from .services import DriftCorrector, ConnectionMonitor, HeartbeatService
 # New destination-based architecture imports
 from pathlib import Path
 
@@ -136,27 +140,19 @@ class LoopEngine:
         self._running = False
         self._midi_enabled = False
 
-        # Drift correction state (Phase 1: Timing improvement)
-        self._step_anchor_time: float | None = None
-        self._step_count: int = 0
-
-        # BPM change grace: suppress next drift reset notification
-        # after BPM change to avoid false positives from timing transitions
-        self._suppress_next_drift_reset: bool = False
-
-        # Drift reset statistics (for monitoring and debugging)
-        self._drift_stats: dict[str, float | int] = {
-            "reset_count": 0,
-            "max_drift_ms": 0.0,
-            "total_skipped_steps": 0,
-            "last_reset_drift_ms": 0.0,
-        }
-
-        # Connection status tracking (Phase 3: Error notification)
-        self._connection_status: dict[str, bool] = {
-            "midi": False,
-            "osc": False,
-        }
+        # Phase 2: Extracted services
+        self._drift_corrector = DriftCorrector(
+            reset_threshold_ms=self.DRIFT_RESET_THRESHOLD_MS,
+            warning_threshold_ms=self.DRIFT_WARNING_THRESHOLD_MS,
+            notifier=self._state_producer,  # Notifies API about drift resets
+        )
+        self._connection_monitor = ConnectionMonitor(
+            notifier=self._state_producer,  # Notifies API about connection losses
+        )
+        self._heartbeat_service = HeartbeatService(
+            publisher=self._state_producer,  # Publishes heartbeat messages
+            interval=self.HEARTBEAT_INTERVAL,
+        )
 
         # Timeline scheduling (cumulative step counter, persists across stop/start)
         self._global_step: int = 0
@@ -294,6 +290,7 @@ class LoopEngine:
 
         Public API for playback control - can be called directly from routes.
         Wrapper around CommandHandler with additional engine-specific logic.
+        Phase 2: Uses DriftCorrector service.
         """
         # Remember state before change
         was_playing = self.state.playback_state == PlaybackState.PLAYING
@@ -309,9 +306,8 @@ class LoopEngine:
             if was_playing and self._midi_enabled:
                 self._clock_generator.send_stop()
 
-            # Reset drift correction anchor (engine-specific)
-            self._step_anchor_time = None
-            self._step_count = 0
+            # Reset drift corrector (Phase 2: delegated to service)
+            self._drift_corrector.reset()
             # NOTE: _global_step is NOT reset - it's a cumulative counter
             # that persists across stop/start for timeline scheduling
 
@@ -326,6 +322,7 @@ class LoopEngine:
 
         Public API for playback control - can be called directly from routes.
         Wrapper around CommandHandler with additional engine-specific logic.
+        Phase 2: Uses DriftCorrector service.
         """
         # Delegate to command handler
         result = self._command_handler.handle_pause(payload)
@@ -338,9 +335,9 @@ class LoopEngine:
             if self._midi_enabled:
                 self._clock_generator.send_stop()
 
-            # Reset drift correction anchor (engine-specific)
+            # Reset drift corrector (Phase 2: delegated to service)
             # Will re-anchor when playback resumes
-            self._step_anchor_time = None
+            self._drift_corrector.reset()
 
             # Send status update (non-blocking)
             self._schedule_status_update()
@@ -360,26 +357,19 @@ class LoopEngine:
         Change BPM with proper anchor reset for smooth transitions.
 
         Wrapper around CommandHandler with engine-specific drift anchor reset logic.
+        Phase 2: Uses DriftCorrector service.
         """
         # Delegate to command handler
         result = self._command_handler.handle_bpm(payload)
 
         if result.success:
-            # Reset anchors during playback to prevent false drift detection
-            # (engine-specific timing logic)
-            if self.state.playing and self._step_anchor_time is not None:
-                current_time = time.perf_counter()
-                self._step_anchor_time = current_time
-                self._step_count = 0
-
-                # Suppress the next drift reset notification (flag-based, not time-based)
-                # This avoids race conditions with async timing
-                self._suppress_next_drift_reset = True
-
+            # Reset drift corrector during playback to prevent false drift detection
+            # (engine-specific timing logic - Phase 2: delegated to service)
+            if self.state.playing:
+                self._drift_corrector.suppress_next_reset()
                 # Also reset MIDI clock anchor with suppression
                 self._clock_generator.suppress_next_drift_reset()
-
-                logger.debug("Anchors reset after BPM change (drift suppression enabled)")
+                logger.debug("Drift anchors reset after BPM change (suppression enabled)")
 
         return result
 
@@ -431,6 +421,7 @@ class LoopEngine:
         Full emergency stop: turn off all notes and stop playback.
 
         Use for: Complete emergency stop of all audio output.
+        Phase 2: Uses DriftCorrector service.
         """
         # Delegate to command handler
         result = self._command_handler.handle_panic(payload)
@@ -443,9 +434,8 @@ class LoopEngine:
             self.state.reset_position()
             self.state.playback_state = PlaybackState.STOPPED
 
-            # Reset drift correction anchor
-            self._step_anchor_time = None
-            self._step_count = 0
+            # Reset drift corrector (Phase 2: delegated to service)
+            self._drift_corrector.reset()
 
             logger.warning("PANIC: Emergency stop executed")
             self._schedule_status_update()
@@ -568,53 +558,34 @@ class LoopEngine:
         """
         return self._global_step
 
-    async def _check_connections(self) -> None:
-        """
-        Check connection status and notify on changes.
-
-        Phase 3: This method checks MIDI and OSC connection status
-        and sends error notifications when connections are lost.
-        """
-        current_status = {
-            "midi": self._midi.is_connected,
-            "osc": self._osc.is_connected,
-        }
-
-        # Check for status changes and notify
-        for key, connected in current_status.items():
-            if self._connection_status[key] and not connected:
-                # Was connected, now disconnected -> send error
-                error_code = f"CONNECTION_LOST_{key.upper()}"
-                await self._state_producer.send_error(
-                    error_code,
-                    f"{key.upper()} connection lost"
-                )
-                logger.warning(f"{key.upper()} connection lost")
-
-        # Update stored status
-        self._connection_status.update(current_status)
-
     async def send_heartbeat(self) -> None:
         """
         Send heartbeat message to API.
 
+        Phase 2: Delegated to HeartbeatService.
         Phase 4: This allows the API to detect if the loop engine is still alive.
         """
-        await self._state_producer.send("heartbeat", {
-            "timestamp": time.perf_counter(),
-        })
+        await self._heartbeat_service.send_heartbeat()
 
     async def _heartbeat_loop(self) -> None:
         """
         Periodically send heartbeat messages and check connections.
 
-        Phase 3: Check connection status and notify on changes.
+        Phase 2: Delegated to HeartbeatService.
+        Phase 3: Check connection status (delegated to ConnectionMonitor).
         Phase 4: Send heartbeat for health monitoring.
         """
-        while self._running:
-            await self._check_connections()
-            await self.send_heartbeat()
-            await asyncio.sleep(self.HEARTBEAT_INTERVAL)
+        # Register connection monitoring as a heartbeat task
+        async def check_connections_task():
+            await self._connection_monitor.check_connections({
+                "midi": self._midi,
+                "osc": self._osc,
+            })
+
+        self._heartbeat_service.register_task(check_connections_task)
+
+        # Run heartbeat service loop
+        await self._heartbeat_service.run_loop(lambda: self._running)
 
     # ================================================================
     # Main Loop
@@ -662,64 +633,28 @@ class LoopEngine:
         Uses ScheduleEntry architecture for event routing.
         Applies pending changes at appropriate timing boundaries.
 
-        Drift correction (Phase 1):
-        - Uses anchor time to calculate expected step times
-        - Compensates for accumulated drift over many steps
-
-        Drift reset (inspired by Tidal's clockSkipTicks):
-        - If drift exceeds threshold, reset anchor instead of catching up
-        - Prevents burst playback after CPU spikes or sleep/wake
+        Phase 2: Uses DriftCorrector service for timing management.
         """
         while self._running:
             if not self.state.playing:
-                # Reset anchor when not playing
-                self._step_anchor_time = None
-                self._step_count = 0
+                # Reset drift corrector when not playing
+                self._drift_corrector.reset()
                 await asyncio.sleep(0.001)
                 continue
 
-            # Initialize anchor time when playback starts
-            if self._step_anchor_time is None:
-                self._step_anchor_time = time.perf_counter()
-                self._step_count = 0
-
-            current_time = time.perf_counter()
             step_duration = self.state.step_duration
 
-            # === Drift detection ===
-            expected_time = self._step_anchor_time + (self._step_count * step_duration)
-            drift_seconds = current_time - expected_time
-            drift_ms = drift_seconds * 1000
+            # Check for drift (DriftCorrector handles anchor initialization)
+            should_reset, drift_ms = await self._drift_corrector.check_drift(
+                step_duration,
+                "Step loop",
+            )
 
-            # Update max drift statistic
-            if abs(drift_ms) > self._drift_stats["max_drift_ms"]:
-                self._drift_stats["max_drift_ms"] = abs(drift_ms)
-
-            # === Drift reset logic (inspired by Tidal) ===
-            if abs(drift_ms) > self.DRIFT_RESET_THRESHOLD_MS:
-                if self._suppress_next_drift_reset:
-                    # Suppress notification after BPM change (expected drift)
-                    self._step_anchor_time = current_time
-                    self._step_count = 0
-                    self._suppress_next_drift_reset = False
-                    logger.debug(
-                        f"Drift {drift_ms:.1f}ms suppressed (BPM change transition)"
-                    )
-                else:
-                    # Normal case: report drift reset to user
-                    await self._handle_drift_reset(drift_ms, current_time)
-
-                # After reset, we're about to sleep for one step_duration.
-                # Set step_count to 1 so next iteration expects: anchor + 1 * step_duration
-                # This prevents infinite reset loop where drift = sleep_time each iteration.
-                self._step_count = 1
-
-                # Wait one step duration before next iteration
+            if should_reset:
+                # Large drift detected, anchor was reset
+                # Wait one step duration before continuing
                 await asyncio.sleep(step_duration)
                 continue
-            elif abs(drift_ms) > self.DRIFT_WARNING_THRESHOLD_MS:
-                # Warning level drift - log but continue with normal correction
-                logger.debug(f"Clock drift warning: {drift_ms:.1f}ms")
 
             # Execute current step: get messages, filter, apply hooks, send
             await self._execute_current_step()
@@ -835,63 +770,26 @@ class LoopEngine:
         Wait for next step with drift correction.
 
         Advances step count and position, then waits until expected time.
+        Phase 2: Uses DriftCorrector service.
         """
-        # Advance step count and position
-        self._step_count += 1
-        self._global_step += 1  # Global step also increments (cumulative counter)
+        # Advance drift corrector counter
+        self._drift_corrector.advance()
+
+        # Advance position counters
+        self._global_step += 1  # Global step (cumulative counter)
         self.state.advance_step()
 
         # Drift-corrected wait: calculate expected time for next step
         step_duration = self.state.step_duration
-        expected_next = self._step_anchor_time + (self._step_count * step_duration)
+        expected_next = self._drift_corrector.get_expected_next_time(step_duration)
         wait_time = max(0, expected_next - time.perf_counter())
         await asyncio.sleep(wait_time)
-
-    async def _handle_drift_reset(self, drift_ms: float, current_time: float) -> None:
-        """
-        Handle large clock drift by resetting the anchor.
-
-        Instead of catching up (which causes burst playback),
-        reset the anchor to current time and continue from there.
-        This is inspired by Tidal's clockSkipTicks mechanism.
-
-        Args:
-            drift_ms: Detected drift in milliseconds (positive = behind, negative = ahead)
-            current_time: Current perf_counter time
-        """
-        step_duration = self.state.step_duration
-
-        # Calculate how many steps would be skipped
-        skipped_steps = int(abs(drift_ms) / (step_duration * 1000))
-
-        # Determine drift direction for logging
-        direction = "behind" if drift_ms > 0 else "ahead"
-
-        logger.warning(
-            f"Clock drift reset: {drift_ms:.1f}ms {direction}, "
-            f"skipping ~{skipped_steps} steps (threshold: {self.DRIFT_RESET_THRESHOLD_MS}ms)"
-        )
-
-        # Update statistics
-        self._drift_stats["reset_count"] = int(self._drift_stats["reset_count"]) + 1
-        self._drift_stats["total_skipped_steps"] = (
-            int(self._drift_stats["total_skipped_steps"]) + skipped_steps
-        )
-        self._drift_stats["last_reset_drift_ms"] = drift_ms
-
-        # Reset anchor to current time
-        self._step_anchor_time = current_time
-        self._step_count = 0
-
-        # Notify API about the drift reset
-        await self._state_producer.send_error(
-            "CLOCK_DRIFT_RESET",
-            f"Clock resynchronized (drift: {drift_ms:.1f}ms {direction}, skipped: ~{skipped_steps} steps)"
-        )
 
     def get_drift_stats(self) -> dict[str, float | int]:
         """
         Get drift correction statistics for monitoring.
+
+        Phase 2: Delegated to DriftCorrector service.
 
         Returns:
             Dictionary with drift statistics:
@@ -899,17 +797,13 @@ class LoopEngine:
             - max_drift_ms: Maximum drift observed
             - total_skipped_steps: Approximate total steps skipped
             - last_reset_drift_ms: Drift value at last reset
-            - current_step_count: Current step count since last anchor
+            - current_step_count: Current step count since last anchor (renamed from current_count)
             - anchor_age_seconds: Time since anchor was set
         """
-        return {
-            **self._drift_stats,
-            "current_step_count": self._step_count,
-            "anchor_age_seconds": (
-                time.perf_counter() - self._step_anchor_time
-                if self._step_anchor_time else 0.0
-            ),
-        }
+        stats = self._drift_corrector.get_stats()
+        # Rename 'current_count' to 'current_step_count' for backward compatibility
+        stats["current_step_count"] = stats.pop("current_count")
+        return stats
 
     async def _clock_loop(self) -> None:
         """24 PPQ MIDI clock loop (delegated to ClockGenerator)."""

@@ -48,8 +48,8 @@ class StabilityTestEngine:
         self.engine = LoopEngine(
             osc=osc,
             midi=midi,
-            commands=commands,
-            publisher=publisher,
+            command_consumer=commands,
+            state_producer=publisher,
         )
         self.engine._register_handlers()
         self.step_times: list[float] = []
@@ -122,26 +122,26 @@ class TestLongRunningTiming:
 
         # Run simplified timing loop
         while time.perf_counter() - start_time < duration_seconds:
-            if engine._step_anchor_time is None:
-                engine._step_anchor_time = time.perf_counter()
-                engine._step_count = 0
+            if engine._drift_corrector._anchor_time is None:
+                engine._drift_corrector._anchor_time = time.perf_counter()
+                engine._drift_corrector._count = 0
 
             current_time = time.perf_counter()
-            expected_time = engine._step_anchor_time + (
-                engine._step_count * expected_step_duration
+            expected_time = engine._drift_corrector._anchor_time + (
+                engine._drift_corrector._count * expected_step_duration
             )
 
             if current_time >= expected_time:
                 # Record interval
-                if engine._step_count > 0:
+                if engine._drift_corrector._count > 0:
                     step_intervals.append(current_time - last_time)
                 last_time = current_time
-                engine._step_count += 1
+                engine._drift_corrector._count += 1
 
                 # Drift tracking
                 drift_ms = (current_time - expected_time) * 1000
-                if abs(drift_ms) > engine._drift_stats["max_drift_ms"]:
-                    engine._drift_stats["max_drift_ms"] = abs(drift_ms)
+                if abs(drift_ms) > engine._drift_corrector._stats["max_drift_ms"]:
+                    engine._drift_corrector._stats["max_drift_ms"] = abs(drift_ms)
 
             await asyncio.sleep(0.001)
 
@@ -186,22 +186,22 @@ class TestLongRunningTiming:
         duration_seconds = 30
         expected_step_duration = engine.state.step_duration
 
-        engine._step_anchor_time = start_time
-        engine._step_count = 0
+        engine._drift_corrector._anchor_time = start_time
+        engine._drift_corrector._count = 0
 
         while time.perf_counter() - start_time < duration_seconds:
             current_time = time.perf_counter()
-            expected_time = engine._step_anchor_time + (
-                engine._step_count * expected_step_duration
+            expected_time = engine._drift_corrector._anchor_time + (
+                engine._drift_corrector._count * expected_step_duration
             )
 
             if current_time >= expected_time:
                 step_count += 1
-                engine._step_count += 1
+                engine._drift_corrector._count += 1
 
                 drift_ms = (current_time - expected_time) * 1000
-                if abs(drift_ms) > engine._drift_stats["max_drift_ms"]:
-                    engine._drift_stats["max_drift_ms"] = abs(drift_ms)
+                if abs(drift_ms) > engine._drift_corrector._stats["max_drift_ms"]:
+                    engine._drift_corrector._stats["max_drift_ms"] = abs(drift_ms)
 
             await asyncio.sleep(0.001)
 
@@ -244,12 +244,12 @@ class TestBPMChangeStress:
         engine = stability_engine.engine
         engine.state.set_bpm(120)
         engine.handle_play({})
-        engine._step_anchor_time = time.perf_counter()
-        engine._step_count = 0
+        engine._drift_corrector._anchor_time = time.perf_counter()
+        engine._drift_corrector._count = 0
 
         # Also set up clock generator
-        engine._clock_generator._clock_anchor_time = time.perf_counter()
-        engine._clock_generator._pulse_count = 0
+        engine._clock_generator._drift_corrector._anchor_time = time.perf_counter()
+        engine._clock_generator._drift_corrector._count = 0
 
         bpm_sequence = [120, 140, 100, 180, 90, 160, 110, 150, 120]
         errors: list[str] = []
@@ -266,12 +266,12 @@ class TestBPMChangeStress:
                 # Verify anchors were reset (for all but first iteration)
                 if i > 0:
                     # Anchor should be recent (within 100ms)
-                    anchor_age = time.perf_counter() - engine._step_anchor_time
+                    anchor_age = time.perf_counter() - engine._drift_corrector._anchor_time
                     if anchor_age > 0.1:
                         errors.append(f"Step anchor not reset for BPM {bpm}")
 
                     clock_anchor_age = (
-                        time.perf_counter() - engine._clock_generator._clock_anchor_time
+                        time.perf_counter() - engine._clock_generator._drift_corrector._anchor_time
                     )
                     if clock_anchor_age > 0.1:
                         errors.append(f"Clock anchor not reset for BPM {bpm}")
@@ -303,7 +303,7 @@ class TestBPMChangeStress:
         """Test extreme BPM values at boundaries."""
         engine = stability_engine.engine
         engine.handle_play({})
-        engine._step_anchor_time = time.perf_counter()
+        engine._drift_corrector._anchor_time = time.perf_counter()
 
         # Test boundary values (clamped to 1.0-999.0 by SessionState)
         extreme_bpms = [0.5, 1, 30, 40, 60, 200, 250, 300, 500, 999, 1500]
@@ -315,7 +315,7 @@ class TestBPMChangeStress:
                 f"BPM out of valid range: {engine.state.bpm}"
             )
             # Verify anchor was reset for each change
-            assert engine._step_anchor_time is not None
+            assert engine._drift_corrector._anchor_time is not None
             await asyncio.sleep(0.01)
 
         engine.handle_stop({})
@@ -342,8 +342,8 @@ class TestCPUSpikeRecovery:
         engine.handle_play({})
 
         start_time = time.perf_counter()
-        engine._step_anchor_time = start_time
-        engine._step_count = 0
+        engine._drift_corrector._anchor_time = start_time
+        engine._drift_corrector._count = 0
 
         step_duration = engine.state.step_duration
         steps_before_spike = 0
@@ -352,25 +352,28 @@ class TestCPUSpikeRecovery:
         # Run for a bit, then simulate spike
         while time.perf_counter() - start_time < 5:
             current_time = time.perf_counter()
-            expected_time = engine._step_anchor_time + (
-                engine._step_count * step_duration
+            expected_time = engine._drift_corrector._anchor_time + (
+                engine._drift_corrector._count * step_duration
             )
 
             # Calculate drift
             drift_ms = (current_time - expected_time) * 1000
 
             # Update max drift
-            if abs(drift_ms) > engine._drift_stats["max_drift_ms"]:
-                engine._drift_stats["max_drift_ms"] = abs(drift_ms)
+            if abs(drift_ms) > engine._drift_corrector._stats["max_drift_ms"]:
+                engine._drift_corrector._stats["max_drift_ms"] = abs(drift_ms)
 
             # Check if drift exceeds threshold
             if abs(drift_ms) > engine.DRIFT_RESET_THRESHOLD_MS:
-                # Trigger drift reset
-                await engine._handle_drift_reset(drift_ms, current_time)
+                # Trigger drift reset (Phase 2: reset anchor, count, and stats)
+                engine._drift_corrector._anchor_time = current_time
+                engine._drift_corrector._count = 0
+                engine._drift_corrector._stats["reset_count"] += 1
+                engine._drift_corrector._stats["last_reset_drift_ms"] = drift_ms
                 spike_triggered = True
 
             if current_time >= expected_time:
-                engine._step_count += 1
+                engine._drift_corrector._count += 1
                 steps_before_spike += 1
 
                 # Simulate CPU spike after 20 steps
@@ -407,8 +410,8 @@ class TestCPUSpikeRecovery:
         engine.handle_play({})
 
         start_time = time.perf_counter()
-        engine._step_anchor_time = start_time
-        engine._step_count = 0
+        engine._drift_corrector._anchor_time = start_time
+        engine._drift_corrector._count = 0
 
         step_duration = engine.state.step_duration
         spike_count = 0
@@ -426,19 +429,23 @@ class TestCPUSpikeRecovery:
                     spike_count += 1
                     continue
 
-            expected_time = engine._step_anchor_time + (
-                engine._step_count * step_duration
+            expected_time = engine._drift_corrector._anchor_time + (
+                engine._drift_corrector._count * step_duration
             )
             drift_ms = (current_time - expected_time) * 1000
 
-            if abs(drift_ms) > engine._drift_stats["max_drift_ms"]:
-                engine._drift_stats["max_drift_ms"] = abs(drift_ms)
+            if abs(drift_ms) > engine._drift_corrector._stats["max_drift_ms"]:
+                engine._drift_corrector._stats["max_drift_ms"] = abs(drift_ms)
 
             if abs(drift_ms) > engine.DRIFT_RESET_THRESHOLD_MS:
-                await engine._handle_drift_reset(drift_ms, current_time)
+                # Trigger drift reset (Phase 2: reset anchor, count, and stats)
+                engine._drift_corrector._anchor_time = current_time
+                engine._drift_corrector._count = 0
+                engine._drift_corrector._stats["reset_count"] += 1
+                engine._drift_corrector._stats["last_reset_drift_ms"] = drift_ms
 
             if current_time >= expected_time:
-                engine._step_count += 1
+                engine._drift_corrector._count += 1
 
             await asyncio.sleep(0.001)
 
@@ -477,8 +484,8 @@ class TestConcurrentLoops:
         engine = LoopEngine(
             osc=mock_osc,
             midi=mock_midi,
-            commands=mock_commands,
-            publisher=mock_publisher,
+            command_consumer=mock_commands,
+            state_producer=mock_publisher,
         )
         engine._register_handlers()
         engine.state.set_bpm(120)
@@ -492,10 +499,10 @@ class TestConcurrentLoops:
         step_duration = engine.state.step_duration
         pulse_duration = engine._clock_generator.calculate_pulse_duration(step_duration)
 
-        engine._step_anchor_time = start_time
-        engine._step_count = 0
-        engine._clock_generator._clock_anchor_time = start_time
-        engine._clock_generator._pulse_count = 0
+        engine._drift_corrector._anchor_time = start_time
+        engine._drift_corrector._count = 0
+        engine._clock_generator._drift_corrector._anchor_time = start_time
+        engine._clock_generator._drift_corrector._count = 0
 
         # Capture anchor times for use in closures (mypy needs explicit types)
         step_anchor: float = start_time
@@ -506,11 +513,11 @@ class TestConcurrentLoops:
             while time.perf_counter() - start_time < duration:
                 current = time.perf_counter()
                 expected = step_anchor + (
-                    engine._step_count * step_duration
+                    engine._drift_corrector._count * step_duration
                 )
                 if current >= expected:
                     step_count += 1
-                    engine._step_count += 1
+                    engine._drift_corrector._count += 1
                 await asyncio.sleep(0.001)
 
         async def clock_loop():
@@ -519,11 +526,11 @@ class TestConcurrentLoops:
             while time.perf_counter() - start_time < duration:
                 current = time.perf_counter()
                 expected = clock_anchor + (
-                    clock._pulse_count * pulse_duration
+                    clock._drift_corrector._count * pulse_duration
                 )
                 if current >= expected:
                     pulse_count += 1
-                    clock._pulse_count += 1
+                    clock._drift_corrector._count += 1
                 await asyncio.sleep(0.0005)  # Clock runs faster
 
         # Run both loops concurrently
@@ -571,8 +578,8 @@ class TestStabilitySummary:
         engine = LoopEngine(
             osc=mock_osc,
             midi=mock_midi,
-            commands=mock_commands,
-            publisher=mock_publisher,
+            command_consumer=mock_commands,
+            state_producer=mock_publisher,
         )
         engine._register_handlers()
 
@@ -581,26 +588,26 @@ class TestStabilitySummary:
         # 1. Basic timing (2s)
         engine.state.set_bpm(120)
         engine.handle_play({})
-        engine._step_anchor_time = time.perf_counter()
-        engine._step_count = 0
+        engine._drift_corrector._anchor_time = time.perf_counter()
+        engine._drift_corrector._count = 0
 
         start = time.perf_counter()
         while time.perf_counter() - start < 2:
             current = time.perf_counter()
-            expected = engine._step_anchor_time + (
-                engine._step_count * engine.state.step_duration
+            expected = engine._drift_corrector._anchor_time + (
+                engine._drift_corrector._count * engine.state.step_duration
             )
             if current >= expected:
-                engine._step_count += 1
+                engine._drift_corrector._count += 1
             await asyncio.sleep(0.001)
 
-        results["timing"] = engine._drift_stats["reset_count"] == 0
+        results["timing"] = engine._drift_corrector._stats["reset_count"] == 0
         engine.handle_stop({})
 
         # 2. BPM changes
         engine.handle_play({})
-        engine._step_anchor_time = time.perf_counter()
-        engine._clock_generator._clock_anchor_time = time.perf_counter()
+        engine._drift_corrector._anchor_time = time.perf_counter()
+        engine._clock_generator._drift_corrector._anchor_time = time.perf_counter()
 
         bpm_errors = 0
         for bpm in [100, 140, 120]:
@@ -615,18 +622,22 @@ class TestStabilitySummary:
 
         # 3. CPU spike recovery
         engine.handle_play({})
-        engine._step_anchor_time = time.perf_counter()
-        engine._step_count = 0
-        engine._drift_stats["reset_count"] = 0
+        engine._drift_corrector._anchor_time = time.perf_counter()
+        engine._drift_corrector._count = 0
+        engine._drift_corrector._stats["reset_count"] = 0
 
         await asyncio.sleep(0.1)  # Small spike
         current = time.perf_counter()
         drift_ms = (
-            current - engine._step_anchor_time - engine._step_count * engine.state.step_duration
+            current - engine._drift_corrector._anchor_time - engine._drift_corrector._count * engine.state.step_duration
         ) * 1000
 
         if abs(drift_ms) > engine.DRIFT_RESET_THRESHOLD_MS:
-            await engine._handle_drift_reset(drift_ms, current)
+            # Trigger drift reset (Phase 2: reset anchor, count, and stats)
+            engine._drift_corrector._anchor_time = current
+            engine._drift_corrector._count = 0
+            engine._drift_corrector._stats["reset_count"] += 1
+            engine._drift_corrector._stats["last_reset_drift_ms"] = drift_ms
 
         results["spike_recovery"] = True  # Just verify no crash
         engine.handle_stop({})

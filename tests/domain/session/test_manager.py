@@ -206,12 +206,12 @@ class TestPatternCRUD:
 
     def test_create_pattern_invalid_track(self, container_with_client):
         """Test creating pattern with invalid track."""
-        result = container_with_client.patterns.create(
-            track_id="invalid",
-            pattern_name="main",
-            client_id="client_001",
-        )
-        assert result is None
+        with pytest.raises(ValueError, match="Track 'invalid' not found"):
+            container_with_client.patterns.create(
+                track_id="invalid",
+                pattern_name="main",
+                client_id="client_001",
+            )
 
     def test_get_pattern(self, container_with_track):
         """Test getting a pattern."""
