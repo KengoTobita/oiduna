@@ -83,6 +83,7 @@ Business logic and data models
 ### Infrastructure Layer
 Technical implementations
 - `execution/` - LoopEngine and runtime execution
+  - Services: DriftCorrector, ConnectionMonitor, HeartbeatService, StepExecutor
 - `routing/` - Message routing and scheduling
 - `transport/` - OSC/MIDI senders and protocols
 - `ipc/` - Inter-process communication

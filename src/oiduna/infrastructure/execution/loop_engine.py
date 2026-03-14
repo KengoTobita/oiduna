@@ -53,7 +53,7 @@ from .command_handler import CommandHandler
 from .note_scheduler import NoteScheduler
 from .session_loader import SessionLoader
 # Phase 2: Extracted services
-from .services import DriftCorrector, ConnectionMonitor, HeartbeatService
+from .services import DriftCorrector, ConnectionMonitor, HeartbeatService, StepExecutor
 # New destination-based architecture imports
 from pathlib import Path
 
@@ -92,11 +92,6 @@ class LoopEngine:
     # Inspired by TidalCycles' clockFrameTimespan (50ms = 20 FPS)
     COMMAND_POLL_MIN_INTERVAL: float = 0.001  # 1ms minimum (responsive)
     COMMAND_POLL_MAX_INTERVAL: float = 0.050  # 50ms maximum (TidalCycles-inspired)
-
-    # Timeline lookahead configuration (ADR-0020)
-    # Apply timeline changes N steps ahead to avoid blocking critical path
-    TIMELINE_LOOKAHEAD_STEPS: int = 32  # 2 bar lookahead (~8sec @ BPM 120)
-    TIMELINE_MIN_LOOKAHEAD: int = 8     # 2 beat minimum (~2sec @ BPM 120)
 
     def __init__(
         self,
@@ -146,6 +141,8 @@ class LoopEngine:
             warning_threshold_ms=self.DRIFT_WARNING_THRESHOLD_MS,
             notifier=self._state_producer,  # Notifies API about drift resets
         )
+        # Phase D2: Step executor service (initialized in start())
+        self._step_executor: StepExecutor | None = None
         self._connection_monitor = ConnectionMonitor(
             notifier=self._state_producer,  # Notifies API about connection losses
         )
@@ -199,6 +196,20 @@ class LoopEngine:
                 note_scheduler=self._note_scheduler,
                 publisher=self._state_producer,
                 midi_enabled=self._midi_enabled,
+            )
+
+        # Initialize step executor (Phase D2)
+        if self._step_executor is None:
+            self._step_executor = StepExecutor(
+                message_scheduler=self._loop_scheduler,
+                message_router=self._destination_router,
+                state_publisher=self._state_producer,
+                message_filter=self.state,  # RuntimeState
+                timeline_provider=self,  # LoopEngine implements TimelineProvider protocol
+                session_loaded_check=lambda: self._session_loader.destinations_loaded,
+                get_tracks_info=self._get_tracks_info,
+                position_update_interval=self.state.position_update_interval,
+                before_send_hooks=self._before_send_hooks,
             )
 
         # Register command handlers
@@ -634,6 +645,7 @@ class LoopEngine:
         Applies pending changes at appropriate timing boundaries.
 
         Phase 2: Uses DriftCorrector service for timing management.
+        Phase D2: Uses StepExecutor service for step processing.
         """
         while self._running:
             if not self.state.playing:
@@ -656,114 +668,15 @@ class LoopEngine:
                 await asyncio.sleep(step_duration)
                 continue
 
-            # Execute current step: get messages, filter, apply hooks, send
-            await self._execute_current_step()
+            # Execute current step (Phase D2: delegated to StepExecutor)
+            if self._step_executor:
+                await self._step_executor.execute_step(
+                    self.state.position.step,
+                    self.state.bpm,
+                )
 
             # Wait for next step with drift correction
             await self._wait_for_next_step()
-
-    def _get_filtered_messages(self, current_step: int) -> list[ScheduleEntry]:
-        """
-        Get and filter messages for current step.
-
-        Returns:
-            Filtered list of ScheduleEntry for current step
-        """
-        if not self._session_loader.destinations_loaded or self._loop_scheduler.message_count == 0:
-            return []
-
-        scheduled_messages = self._loop_scheduler.get_messages_at_step(current_step)
-        if not scheduled_messages:
-            return []
-
-        # Filter by mute/solo state
-        return self.state.filter_messages(scheduled_messages)
-
-    def _apply_hooks(
-        self, messages: list[ScheduleEntry], current_step: int
-    ) -> list[ScheduleEntry]:
-        """
-        Apply extension hooks to messages.
-
-        Args:
-            messages: List of scheduled messages
-            current_step: Current step number
-
-        Returns:
-            Modified messages after applying all hooks
-        """
-        for hook in self._before_send_hooks:
-            messages = hook(messages, self.state.bpm, current_step)
-        return messages
-
-    def _send_messages(self, messages: list[ScheduleEntry], current_step: int) -> None:
-        """
-        Send messages to destination router.
-
-        Args:
-            messages: List of scheduled messages to send
-            current_step: Current step number (for logging)
-        """
-        if messages:
-            logger.debug(
-                f"Step {current_step}: sending {len(messages)} "
-                "scheduled messages via destination router"
-            )
-            self._destination_router.send_messages(messages)
-
-    async def _publish_periodic_updates(self, current_step: int) -> None:
-        """
-        Publish periodic updates (position, tracks info).
-
-        Args:
-            current_step: Current step number
-        """
-        # Publish position based on configured interval
-        # "beat": every 4 steps (quarter note)
-        # "bar": every 16 steps (full bar)
-        interval = 16 if self.state.position_update_interval == "bar" else 4
-        if current_step % interval == 0:
-            await self._state_producer.send_position(
-                self.state.position.to_dict(),
-                bpm=self.state.bpm,
-                transport=self.state.playback_state.value,
-            )
-
-        # Send tracks info at bar boundaries for Monitor page sync
-        if current_step % 16 == 0:
-            await self._state_producer.send_tracks(self._get_tracks_info())
-
-    async def _execute_current_step(self) -> None:
-        """Execute processing for current step."""
-        try:
-            current_step = self.state.position.step
-
-            # Apply timeline changes with lookahead (ADR-0020)
-            # Load messages N steps ahead to avoid blocking critical path
-            if self._timeline:
-                future_global_step = self._global_step + self.TIMELINE_LOOKAHEAD_STEPS
-                from .timeline_loader import TimelineLoader
-                TimelineLoader.apply_changes_at_step(
-                    future_global_step,
-                    self._timeline,
-                    self._loop_scheduler,
-                )
-
-            # Get and filter messages (already prepared by lookahead)
-            messages = self._get_filtered_messages(current_step)
-
-            if messages:
-                # Apply extension hooks
-                messages = self._apply_hooks(messages, current_step)
-                # Send to destination router
-                self._send_messages(messages, current_step)
-
-            # Publish periodic updates
-            await self._publish_periodic_updates(current_step)
-
-        except Exception as e:
-            logger.error(f"Step processing error: {e}\n{traceback.format_exc()}")
-            await self._state_producer.send_error("STEP_ERROR", str(e))
 
     async def _wait_for_next_step(self) -> None:
         """
