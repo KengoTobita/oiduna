@@ -1,30 +1,40 @@
-"""Client manager for session client management."""
+"""Client service for client business logic."""
 
 from typing import Any, Optional
-from oiduna.domain.models import Session, ClientInfo
-from .base import BaseManager, SessionChangePublisher
+from oiduna.domain.models import ClientInfo
+from oiduna.domain.session.types import SessionChangePublisher
+from oiduna.domain.session.repositories.client_repository import ClientRepository
+from .base import BaseService
 
 
-class ClientManager(BaseManager):
+class ClientService(BaseService):
     """
-    Manages client CRUD operations in the session.
+    Service for client business logic.
 
-    Provides creation, retrieval, listing, and deletion of clients.
+    Handles validation, event emission, and cascade operations.
+    Coordinates ClientRepository and other repositories for complex operations.
     """
 
     def __init__(
         self,
-        session: Session,
-        event_publisher: Optional[SessionChangePublisher] = None,
+        client_repo: ClientRepository,
+        track_repo: Any,  # TrackRepository - avoid circular import
+        pattern_repo: Any,  # PatternRepository - avoid circular import
+        change_publisher: Optional[SessionChangePublisher] = None,
     ) -> None:
         """
-        Initialize the ClientManager.
+        Initialize the ClientService.
 
         Args:
-            session: The session object to manage
-            event_publisher: Optional event publisher for emitting state changes
+            client_repo: Repository for client data access
+            track_repo: Repository for track data access (for cascade delete)
+            pattern_repo: Repository for pattern data access (for cascade delete)
+            change_publisher: Optional event publisher for emitting state changes
         """
-        super().__init__(session, event_publisher)
+        super().__init__(change_publisher)
+        self.client_repo = client_repo
+        self.track_repo = track_repo
+        self.pattern_repo = pattern_repo
 
     def create(
         self,
@@ -48,7 +58,7 @@ class ClientManager(BaseManager):
         Raises:
             ValueError: If client_id already exists
         """
-        if client_id in self.session.clients:
+        if self.client_repo.exists(client_id):
             raise ValueError(f"Client {client_id} already exists")
 
         client = ClientInfo(
@@ -59,14 +69,17 @@ class ClientManager(BaseManager):
             metadata=metadata or {},
         )
 
-        self.session.clients[client_id] = client
+        self.client_repo.save(client)
 
         # Emit event
-        self._emit_change("client_connected", {
-            "client_id": client_id,
-            "client_name": client_name,
-            "distribution": distribution,
-        })
+        self._emit_change(
+            "client_connected",
+            {
+                "client_id": client_id,
+                "client_name": client_name,
+                "distribution": distribution,
+            },
+        )
 
         return client
 
@@ -80,7 +93,7 @@ class ClientManager(BaseManager):
         Returns:
             ClientInfo if found, None otherwise
         """
-        return self.session.clients.get(client_id)
+        return self.client_repo.get(client_id)
 
     def list_clients(self) -> list[ClientInfo]:
         """
@@ -89,7 +102,7 @@ class ClientManager(BaseManager):
         Returns:
             List of all ClientInfo objects
         """
-        return list(self.session.clients.values())
+        return self.client_repo.list_all()
 
     def delete(self, client_id: str) -> bool:
         """
@@ -104,16 +117,15 @@ class ClientManager(BaseManager):
         Returns:
             True if deleted, False if not found
         """
-        if client_id in self.session.clients:
-            del self.session.clients[client_id]
+        if not self.client_repo.exists(client_id):
+            return False
 
-            # Emit event
-            self._emit_change("client_disconnected", {
-                "client_id": client_id,
-            })
+        self.client_repo.delete(client_id)
 
-            return True
-        return False
+        # Emit event
+        self._emit_change("client_disconnected", {"client_id": client_id})
+
+        return True
 
     def delete_resources(self, client_id: str) -> dict[str, int]:
         """
@@ -129,16 +141,16 @@ class ClientManager(BaseManager):
         patterns_deleted = 0
 
         # Find and delete tracks owned by this client
+        all_tracks = self.track_repo.list_all()
         track_ids_to_delete = [
-            track_id
-            for track_id, track in self.session.tracks.items()
-            if track.client_id == client_id
+            track.track_id for track in all_tracks if track.client_id == client_id
         ]
 
         for track_id in track_ids_to_delete:
-            track = self.session.tracks[track_id]
-            patterns_deleted += len(track.patterns)
-            del self.session.tracks[track_id]
-            tracks_deleted += 1
+            track = self.track_repo.get(track_id)
+            if track:
+                patterns_deleted += len(track.patterns)
+                self.track_repo.delete(track_id)
+                tracks_deleted += 1
 
         return {"tracks": tracks_deleted, "patterns": patterns_deleted}

@@ -1,52 +1,38 @@
-"""
-Timeline manager for scheduled pattern changes.
+"""Timeline service for timeline business logic."""
 
-Handles scheduling, cancellation, and permission checks for timeline changes.
-"""
-
-from __future__ import annotations
 from typing import Optional
-
-from oiduna.domain.timeline import CuedChange, CuedChangeTimeline
+from oiduna.domain.timeline import CuedChange
 from oiduna.domain.schedule.models import LoopSchedule
-from .base import BaseManager
+from oiduna.domain.session.types import SessionChangePublisher
+from oiduna.domain.session.repositories.timeline_repository import TimelineRepository
+from .base import BaseService
 
 # Timeline lookahead configuration (from LoopEngine ADR-0020)
 TIMELINE_MIN_LOOKAHEAD = 8  # 2 beat minimum (~2sec @ BPM 120)
 
 
-class TimelineManager(BaseManager):
+class TimelineService(BaseService):
     """
-    Manages timeline-based scheduling of pattern changes.
+    Service for timeline business logic.
 
-    Responsibilities:
-    - CRUD operations on scheduled changes (with permission checks)
-    - SSE event emission for timeline updates
-    - Integration with SessionContainer
-
-    Example:
-        >>> manager = TimelineManager(session, event_publisher)
-        >>> success, msg, change_id = manager.cue_change(
-        ...     batch, 1000, "alice_001", "Alice", "Kick pattern", 500
-        ... )
+    Handles scheduling validation, permission checks, and event emission.
+    Manages scheduled pattern changes with lookahead validation.
     """
 
     def __init__(
         self,
-        session,
-        event_publisher=None,
-        timeline: Optional[CuedChangeTimeline] = None,
-    ):
+        timeline_repo: TimelineRepository,
+        change_publisher: Optional[SessionChangePublisher] = None,
+    ) -> None:
         """
-        Initialize TimelineManager.
+        Initialize the TimelineService.
 
         Args:
-            session: Session instance (for consistency with other managers)
-            event_publisher: Optional event publisher for SSE notifications
-            timeline: Optional timeline instance (creates new if None)
+            timeline_repo: Repository for timeline data access
+            change_publisher: Optional event publisher for emitting state changes
         """
-        super().__init__(session, event_publisher)
-        self.timeline = timeline or CuedChangeTimeline()
+        super().__init__(change_publisher)
+        self.timeline_repo = timeline_repo
 
     def cue_change(
         self,
@@ -94,7 +80,7 @@ class TimelineManager(BaseManager):
         )
 
         # Add to timeline
-        success, msg = self.timeline.add_change(change, current_global_step)
+        success, msg = self.timeline_repo.add_change(change, current_global_step)
 
         if not success:
             return False, msg, None
@@ -120,23 +106,29 @@ class TimelineManager(BaseManager):
             (success, message) tuple
         """
         # Get the change to check ownership
-        change = self.timeline.get_change_by_id(change_id)
+        change = self.timeline_repo.get_change_by_id(change_id)
         if change is None:
             return False, f"Change {change_id} not found"
 
         # Permission check: only owner can cancel
         if change.client_id != client_id:
-            return False, f"Permission denied: change {change_id} owned by {change.client_id}"
+            return (
+                False,
+                f"Permission denied: change {change_id} owned by {change.client_id}",
+            )
 
         # Cancel the change
-        success, msg = self.timeline.cancel_change(change_id)
+        success, msg = self.timeline_repo.cancel_change(change_id)
 
         if success:
             # Emit SSE event
-            self._emit_change("change_cancelled", {
-                "change_id": change_id,
-                "client_id": client_id,
-            })
+            self._emit_change(
+                "change_cancelled",
+                {
+                    "change_id": change_id,
+                    "client_id": client_id,
+                },
+            )
 
         return success, msg
 
@@ -164,13 +156,16 @@ class TimelineManager(BaseManager):
             (success, message) tuple
         """
         # Get the old change to check ownership
-        old_change = self.timeline.get_change_by_id(change_id)
+        old_change = self.timeline_repo.get_change_by_id(change_id)
         if old_change is None:
             return False, f"Change {change_id} not found"
 
         # Permission check: only owner can update
         if old_change.client_id != client_id:
-            return False, f"Permission denied: change {change_id} owned by {old_change.client_id}"
+            return (
+                False,
+                f"Permission denied: change {change_id} owned by {old_change.client_id}",
+            )
 
         # Create new change with same ID and client info
         new_change = CuedChange(
@@ -184,7 +179,7 @@ class TimelineManager(BaseManager):
         )
 
         # Update in timeline
-        success, msg = self.timeline.update_change(
+        success, msg = self.timeline_repo.update_change(
             change_id,
             new_change,
             current_global_step,
@@ -206,7 +201,7 @@ class TimelineManager(BaseManager):
         Returns:
             CuedChange or None if not found
         """
-        return self.timeline.get_change_by_id(change_id)
+        return self.timeline_repo.get_change_by_id(change_id)
 
     def get_all_upcoming(
         self,
@@ -223,4 +218,4 @@ class TimelineManager(BaseManager):
         Returns:
             List of upcoming changes, sorted by (target_step, sequence_number)
         """
-        return self.timeline.get_all_upcoming(current_global_step, limit)
+        return self.timeline_repo.get_all_upcoming(current_global_step, limit)
