@@ -24,8 +24,13 @@ class ScheduleEntryRequest(BaseModel):
     """Individual scheduled message for timeline API"""
 
     destination_id: str = Field(..., description="Destination ID (e.g., 'superdirt')")
-    cycle: float = Field(..., description="Cycle position")
     step: int = Field(..., ge=0, le=255, description="Step number (0-255)")
+    offset: float = Field(
+        default=0.0,
+        ge=0.0,
+        lt=1.0,
+        description="Relative offset within step [0.0, 1.0)"
+    )
     params: dict = Field(default_factory=dict, description="Generic parameters dict")
 
 
@@ -139,8 +144,8 @@ async def cue_change(
     messages = [
         ScheduleEntry(
             destination_id=msg.destination_id,
-            cycle=msg.cycle,
             step=msg.step,
+            offset=msg.offset,
             params=msg.params,
         )
         for msg in request.messages
@@ -271,8 +276,8 @@ async def update_change(
         messages = [
             ScheduleEntry(
                 destination_id=msg.destination_id,
-                cycle=msg.cycle,
                 step=msg.step,
+                offset=msg.offset,
                 params=msg.params,
             )
             for msg in request.messages

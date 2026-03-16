@@ -213,9 +213,37 @@ class DriftCorrector:
         """Advance the counter after successful interval."""
         self._count += 1
 
+    def get_expected_time_with_offset(
+        self,
+        interval_duration: float,
+        offset: float = 0.0
+    ) -> float:
+        """
+        Get expected time for next interval with sub-step offset.
+
+        Core timing calculation for offset support.
+
+        Args:
+            interval_duration: Expected duration between intervals (seconds)
+            offset: Relative position within interval [0.0, 1.0)
+
+        Returns:
+            Expected time for interval with offset applied (perf_counter)
+        """
+        if self._anchor_time is None:
+            return time.perf_counter()
+
+        # Base expected time (start of step)
+        base_time = self._anchor_time + (self._count * interval_duration)
+
+        # Add offset within step
+        offset_adjustment = interval_duration * offset
+
+        return base_time + offset_adjustment
+
     def get_expected_next_time(self, interval_duration: float) -> float:
         """
-        Get the expected time for the next interval.
+        Get the expected time for the next interval (start of step).
 
         Args:
             interval_duration: Expected duration between intervals (seconds)
@@ -223,9 +251,7 @@ class DriftCorrector:
         Returns:
             Expected time for next interval (perf_counter)
         """
-        if self._anchor_time is None:
-            return time.perf_counter()
-        return self._anchor_time + (self._count * interval_duration)
+        return self.get_expected_time_with_offset(interval_duration, offset=0.0)
 
     def get_stats(self) -> dict[str, float | int]:
         """

@@ -37,8 +37,8 @@ def container():
 
     # Add pattern with events (no hardcoded pattern_id)
     events = [
-        PatternEvent(step=0, cycle=0.0, params={}),
-        PatternEvent(step=64, cycle=1.0, params={"gain": 0.9}),
+        PatternEvent(step=0, offset=0.0, params={}),
+        PatternEvent(step=64, offset=0.0, params={"gain": 0.9}),
     ]
     pattern = container.patterns.create(
         track_id=track.track_id,
@@ -74,7 +74,7 @@ class TestSessionCompiler:
         msg = batch.entries[0]
         assert msg.destination_id == "superdirt"
         assert msg.step == 0
-        assert msg.cycle == 0.0
+        assert msg.offset == 0.0
         assert msg.params["sound"] == "bd"
         assert msg.params["orbit"] == 0
         assert msg.params["track_id"] == track_id
@@ -82,7 +82,7 @@ class TestSessionCompiler:
         # Check second message (event params override base params)
         msg = batch.entries[1]
         assert msg.step == 64
-        assert msg.cycle == 1.0
+        assert msg.offset == 0.0
         assert msg.params["gain"] == 0.9
         assert msg.params["sound"] == "bd"  # Base param
 
@@ -134,7 +134,7 @@ class TestSessionCompiler:
             pattern_name="main",
             client_id=client_id,
             active=True,
-            events=[PatternEvent(step=128, cycle=2.0, params={})]
+            events=[PatternEvent(step=128, offset=0.0, params={})]
         )
 
         batch = SessionCompiler.compile(container.session)

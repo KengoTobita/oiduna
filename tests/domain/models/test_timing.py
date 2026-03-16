@@ -5,61 +5,13 @@ from oiduna.domain.models.timing import (
     StepNumber,
     BeatNumber,
     BarNumber,
-    CycleFloat,
     BPM,
     Milliseconds,
-    step_to_cycle,
-    cycle_to_step,
     step_to_beat,
     step_to_bar,
     bpm_to_step_duration_ms,
     bpm_to_loop_duration_ms,
 )
-
-
-class TestStepToCycle:
-    """Test step to cycle conversion."""
-
-    def test_step_0_to_cycle(self):
-        """Step 0 should map to cycle 0.0."""
-        assert step_to_cycle(StepNumber(0)) == CycleFloat(0.0)
-
-    def test_step_64_to_cycle(self):
-        """Step 64 should map to cycle 1.0 (1 bar)."""
-        result = step_to_cycle(StepNumber(64))
-        assert abs(result - 1.0) < 0.001
-
-    def test_step_128_to_cycle(self):
-        """Step 128 should map to cycle 2.0 (2 bars)."""
-        result = step_to_cycle(StepNumber(128))
-        assert abs(result - 2.0) < 0.001
-
-    def test_step_255_to_cycle(self):
-        """Step 255 should map to cycle ~3.984 (255/256 * 4.0)."""
-        result = step_to_cycle(StepNumber(255))
-        assert abs(result - 3.984375) < 0.001
-
-
-class TestCycleToStep:
-    """Test cycle to step conversion."""
-
-    def test_cycle_0_to_step(self):
-        """Cycle 0.0 should map to step 0."""
-        assert cycle_to_step(CycleFloat(0.0)) == StepNumber(0)
-
-    def test_cycle_1_to_step(self):
-        """Cycle 1.0 should map to step 64."""
-        assert cycle_to_step(CycleFloat(1.0)) == StepNumber(64)
-
-    def test_cycle_2_to_step(self):
-        """Cycle 2.0 should map to step 128."""
-        assert cycle_to_step(CycleFloat(2.0)) == StepNumber(128)
-
-    def test_cycle_4_to_step(self):
-        """Cycle 4.0 should map to step 256 (wraps to 0)."""
-        # Note: This is out of range (0-255), but demonstrates the formula
-        # In practice, cycles should be 0.0-3.996
-        pass
 
 
 class TestStepToBeat:
@@ -144,26 +96,6 @@ class TestBPMToLoopDuration:
         assert 21333 <= result <= 21334
 
 
-class TestRoundTrip:
-    """Test round-trip conversions."""
-
-    def test_step_cycle_roundtrip(self):
-        """Step -> Cycle -> Step should preserve value."""
-        for step in [0, 64, 128, 192, 255]:
-            cycle = step_to_cycle(StepNumber(step))
-            result = cycle_to_step(cycle)
-            # Allow small rounding error
-            assert abs(result - step) <= 1
-
-    def test_cycle_step_roundtrip(self):
-        """Cycle -> Step -> Cycle should be close (with quantization)."""
-        for cycle in [0.0, 1.0, 2.0, 3.0]:
-            step = cycle_to_step(CycleFloat(cycle))
-            result = step_to_cycle(step)
-            # Allow small error due to quantization
-            assert abs(result - cycle) < 0.1
-
-
 class TestTypeSafety:
     """Test that NewType provides type safety (documentation only).
 
@@ -177,16 +109,8 @@ class TestTypeSafety:
         assert isinstance(step, int)
         assert step == 42
 
-        cycle = CycleFloat(1.5)
-        assert isinstance(cycle, float)
-        assert cycle == 1.5
-
     def test_conversion_functions_accept_newtypes(self):
         """Conversion functions work with NewType values."""
-        step = StepNumber(64)
-        cycle = step_to_cycle(step)
-        assert isinstance(cycle, float)
-
         bpm = BPM(120)
         duration = bpm_to_step_duration_ms(bpm)
         assert isinstance(duration, int)

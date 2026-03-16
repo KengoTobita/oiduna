@@ -401,36 +401,55 @@ Loop (256 steps = 4.0 cycles)
 ... 繰り返し（64-255 steps）
 ```
 
-#### step（整数）vs cycle（浮動小数点）
+#### step（整数）vs offset（浮動小数点）
 
-PatternEventとScheduledMessageは**両方の表現**を持ちます:
+ScheduleEntryは**両方の表現**を持ちます:
 
 ```python
 @dataclass
-class PatternEvent:
+class ScheduleEntry:
     step: int        # 0-255（量子化されたステップ番号）
-    cycle: float     # 0.0-4.0（精密なタイミング）
+    offset: float    # 0.0-0.999...（ステップ内相対位置）
     params: dict[str, Any]
 ```
 
 **使い分け**:
-- **step**: MessageSchedulerのインデックスに使用（O(1)検索のため整数が必須）
-- **cycle**: TidalCycles互換性と精密なタイミング表現（小数点以下の位置）
+- **step**: MessageSchedulerのO(1)インデックス検索
+- **offset**: スウィング、トリプレット、マイクロタイミング
 
-**変換式**:
+**offsetの範囲**: `[0.0, 1.0)` 半開区間
+- `0.0` = ステップ開始（デフォルト）
+- `0.5` = ステップ中間（スウィング）
+- `0.666` = 2/3位置（トリプレット feel）
+- `0.999...` = 次ステップ直前
+
+**BPM非依存**:
+offsetは比率なので、BPM変更時も値は不変。
+絶対時刻のみが再計算される。
+
+**計算式**:
 ```python
-cycle = (step / 256.0) * 4.0  # step → cycle
-step = int((cycle / 4.0) * 256)  # cycle → step (量子化)
+絶対時刻 = (step * step_duration) + (offset * step_duration)
+step_duration = (60.0 / BPM) / 4  # 秒/step
 ```
 
-**例**:
-| step | cycle | 意味 |
-|------|-------|------|
-| 0 | 0.0 | ループ開始 |
-| 16 | 0.25 | 1拍目の終わり（= 0.25サイクル） |
-| 64 | 1.0 | 1小節目の終わり（= 1.0サイクル） |
-| 128 | 2.0 | 2小節目の終わり |
-| 255 | 3.996... | ループの最後 |
+**例（120 BPM）**:
+| step | offset | 絶対時刻（ms） | 意味 |
+|------|--------|---------------|------|
+| 0 | 0.0 | 0ms | ステップ開始 |
+| 0 | 0.5 | 62.5ms | スウィング（ステップ中間） |
+| 0 | 0.666 | 83.3ms | トリプレット（2/3位置） |
+| 1 | 0.0 | 125ms | 次ステップ開始 |
+
+**変拍子の表現**:
+Oidunaは1 bar = 16 steps固定だが、step + offsetの組み合わせで変拍子を表現可能。
+
+例: **3/4拍子**（12 steps = 3拍）
+- 1拍目: `step=0, offset=0.0` → 絶対位置 0 steps
+- 2拍目: `step=5, offset=0.333` → 絶対位置 5.333 steps
+- 3拍目: `step=10, offset=0.666` → 絶対位置 10.666 steps
+
+これにより、16stepグリッド上で自由な拍位置を指定できる。
 
 #### BPMと時間の関係
 

@@ -119,7 +119,7 @@ def test_scheduled_change_from_dict():
         "sequence_number": 5,
         "batch": {
             "messages": [
-                {"destination_id": "superdirt", "cycle": 0.0, "step": 0, "params": {"s": "bd"}}
+                {"destination_id": "superdirt", "offset": 0.0, "step": 0, "params": {"s": "bd"}}
             ],
             "bpm": 140.0,
             "pattern_length": 4.0,

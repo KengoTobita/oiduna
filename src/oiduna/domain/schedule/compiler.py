@@ -62,8 +62,8 @@ class SessionCompiler:
         # Create scheduled message
         return ScheduleEntry(
             destination_id=track.destination_id,
-            cycle=event.cycle,
             step=event.step,
+            offset=event.offset,
             params=params,
         )
 

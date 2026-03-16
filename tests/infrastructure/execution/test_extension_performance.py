@@ -16,7 +16,7 @@ class MockScheduleEntry:
     """Mock ScheduleEntry for testing"""
 
     destination_id: str
-    cycle: float
+    offset: float
     step: int
     params: dict
 
@@ -49,7 +49,7 @@ class TestBeforeSendHooksPerformance:
         messages = [
             MockScheduleEntry(
                 destination_id="superdirt",
-                cycle=0.0,
+                offset=0.0,
                 step=0,
                 params={"s": "bd", "gain": 0.8, "pan": 0.5, "speed": 1.0, "orbit": 0},
             )
@@ -81,7 +81,7 @@ class TestBeforeSendHooksPerformance:
         messages = [
             MockScheduleEntry(
                 destination_id="superdirt",
-                cycle=0.0,
+                offset=0.0,
                 step=0,
                 params={
                     "s": f"sound{i}",
@@ -125,7 +125,7 @@ class TestBeforeSendHooksPerformance:
         messages = [
             MockScheduleEntry(
                 destination_id="superdirt",
-                cycle=0.0,
+                offset=0.0,
                 step=0,
                 params={
                     "s": f"sound{i}",
@@ -179,7 +179,7 @@ class TestBeforeSendHooksPerformance:
         messages = [
             MockScheduleEntry(
                 destination_id="superdirt" if i % 2 == 0 else "midi",
-                cycle=0.0,
+                offset=0.0,
                 step=0,
                 params={"s": f"sound{i}", "gain": 0.8},
             )
@@ -214,7 +214,7 @@ class TestBeforeSendHooksPerformance:
         messages = [
             MockScheduleEntry(
                 destination_id="superdirt",
-                cycle=0.0,
+                offset=0.0,
                 step=0,
                 params={"s": "bd", "gain": 0.8},
             )
@@ -233,7 +233,7 @@ class TestBeforeSendHooksPerformance:
         messages = [
             MockScheduleEntry(
                 destination_id="superdirt",
-                cycle=0.0,
+                offset=0.0,
                 step=0,
                 params={"s": "bd"},
             )

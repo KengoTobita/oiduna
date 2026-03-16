@@ -17,12 +17,12 @@ class PatternEvent(BaseModel):
     A single scheduled musical event within a pattern.
 
     PatternEvents are combined with Track.base_params to generate ScheduleEntries.
-    They define precise timing (step, cycle) and sound parameters.
+    They define precise timing (step, offset) and sound parameters.
 
     Example:
         >>> event = PatternEvent(
         ...     step=0,
-        ...     cycle=0.0,
+        ...     offset=0.0,
         ...     params={"gain": 0.8, "pan": 0.5}
         ... )
     """
@@ -33,10 +33,11 @@ class PatternEvent(BaseModel):
         lt=256,
         description="Quantized step position (0-255 in 256-step grid)"
     )
-    cycle: float = Field(
-        ...,
+    offset: float = Field(
+        default=0.0,
         ge=0.0,
-        description="Precise cycle position for timing"
+        lt=1.0,
+        description="Relative timing offset within step [0.0, 1.0) - enables swing/triplets"
     )
     params: dict[str, Any] = Field(
         default_factory=dict,
@@ -51,12 +52,12 @@ class PatternEvent(BaseModel):
             "examples": [
                 {
                     "step": 0,
-                    "cycle": 0.0,
+                    "offset": 0.0,
                     "params": {"gain": 0.8}
                 },
                 {
                     "step": 64,
-                    "cycle": 1.0,
+                    "offset": 0.5,
                     "params": {"note": 48, "velocity": 100}
                 }
             ]

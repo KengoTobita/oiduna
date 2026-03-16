@@ -6,6 +6,7 @@ from __future__ import annotations
 from typing import Protocol
 from collections import defaultdict
 import logging
+import time
 
 from oiduna.domain.schedule.models import ScheduleEntry
 from oiduna.domain.schedule.validators import OscValidator, MidiValidator
@@ -118,6 +119,40 @@ class DestinationRouter:
         # Send to each destination
         for dest_id, dest_messages in by_destination.items():
             self._send_to_destination(dest_id, dest_messages)
+
+    def send_messages_with_timing(
+        self,
+        messages: List[ScheduleEntry],
+        offset: float,
+        step_duration: float
+    ) -> None:
+        """
+        Send messages with offset-based timing delay.
+
+        Applies a delay based on the offset value before sending messages.
+        This enables swing, triplets, and other micro-timing effects.
+
+        Args:
+            messages: Messages to send
+            offset: Relative offset within step [0.0, 1.0)
+            step_duration: Duration of one step in seconds
+
+        Example:
+            At 120 BPM, step_duration = 0.125s (125ms)
+            offset=0.5 → delay = 62.5ms (halfway through step)
+        """
+        if not messages:
+            return
+
+        # Calculate delay time
+        delay_seconds = step_duration * offset
+
+        # Apply delay if significant (> 1ms)
+        if delay_seconds > 0.001:
+            time.sleep(delay_seconds)
+
+        # Send messages normally
+        self.send_messages(messages)
 
     def _send_to_destination(self, dest_id: str, dest_messages: List[ScheduleEntry]) -> None:
         """

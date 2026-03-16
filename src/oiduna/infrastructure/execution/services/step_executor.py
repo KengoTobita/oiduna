@@ -43,6 +43,15 @@ class MessageRouter(Protocol):
         """Send messages to configured destinations."""
         ...
 
+    def send_messages_with_timing(
+        self,
+        messages: list[Any],
+        offset: float,
+        step_duration: float
+    ) -> None:
+        """Send messages with offset-based timing delay."""
+        ...
+
 
 class StatePublisher(Protocol):
     """Protocol for state publishing (StateProducer)."""
@@ -174,8 +183,8 @@ class StepExecutor:
             if messages:
                 # Stage 3: Apply extension hooks
                 messages = self._apply_hooks(messages, current_step, current_bpm)
-                # Stage 4: Send to destination router
-                self._send_messages(messages, current_step)
+                # Stage 4: Send to destination router with timing
+                self._send_messages_with_timing(messages, current_step, current_bpm)
 
             # Stage 5: Publish periodic updates
             await self._publish_periodic_updates(current_step, current_bpm)
@@ -247,20 +256,52 @@ class StepExecutor:
             messages = hook(messages, current_bpm, current_step)
         return messages
 
-    def _send_messages(self, messages: list[Any], current_step: int) -> None:
+    def _send_messages_with_timing(
+        self,
+        messages: list[Any],
+        current_step: int,
+        current_bpm: float
+    ) -> None:
         """
-        Send messages to destination router.
+        Send messages with offset-based timing.
+
+        Groups messages by offset and sends them with appropriate delays.
 
         Args:
             messages: List of scheduled messages to send
             current_step: Current step number (for logging)
+            current_bpm: Current BPM for step duration calculation
         """
-        if messages:
-            logger.debug(
-                f"Step {current_step}: sending {len(messages)} "
-                "scheduled messages via destination router"
+        if not messages:
+            return
+
+        from collections import defaultdict
+        by_offset: dict[float, list[Any]] = defaultdict(list)
+
+        # Group messages by offset
+        for msg in messages:
+            offset = getattr(msg, 'offset', 0.0)
+            by_offset[offset].append(msg)
+
+        # Sort offsets to send in chronological order
+        sorted_offsets = sorted(by_offset.keys())
+
+        # Calculate step duration in seconds
+        step_duration = 60.0 / current_bpm / 4  # seconds per step (1/16 note)
+
+        logger.debug(
+            f"Step {current_step}: sending {len(messages)} messages "
+            f"across {len(sorted_offsets)} offset(s)"
+        )
+
+        # Send messages at each offset
+        for offset in sorted_offsets:
+            offset_messages = by_offset[offset]
+            self._message_router.send_messages_with_timing(
+                offset_messages,
+                offset=offset,
+                step_duration=step_duration
             )
-            self._message_router.send_messages(messages)
 
     async def _publish_periodic_updates(
         self, current_step: int, current_bpm: float

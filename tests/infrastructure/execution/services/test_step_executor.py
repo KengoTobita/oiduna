@@ -47,6 +47,16 @@ class MockMessageRouter:
     def send_messages(self, messages: list) -> None:
         self.sent_messages.extend(messages)
 
+    def send_messages_with_timing(
+        self,
+        messages: list,
+        offset: float,
+        step_duration: float
+    ) -> None:
+        """Send messages with timing (mock implementation)."""
+        # For testing, just send messages immediately
+        self.sent_messages.extend(messages)
+
 
 class MockStatePublisher:
     """Mock state publisher for testing."""

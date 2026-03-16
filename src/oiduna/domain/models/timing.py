@@ -19,9 +19,9 @@ __all__ = [
     "StepNumber",
     "BeatNumber",
     "BarNumber",
-    "CycleFloat",
     "BPM",
     "Milliseconds",
+    "validate_offset",
 ]
 
 # Timing units (quantized positions in the 256-step loop)
@@ -46,16 +46,6 @@ BarNumber = NewType("BarNumber", int)
 4 bars = 1 loop
 """
 
-# Timing units (precise floating-point positions)
-CycleFloat = NewType("CycleFloat", float)
-"""Precise cycle position (0.0-4.0).
-
-1.0 cycle = 64 steps = 4 beats = 1 bar
-4.0 cycles = 256 steps = 1 loop
-
-Used for precise timing in TidalCycles-compatible events.
-"""
-
 # Tempo
 BPM = NewType("BPM", int)
 """Beats per minute (20-999).
@@ -72,47 +62,35 @@ Used for timing intervals, durations, and thresholds.
 """
 
 
-# Conversion utilities
-def step_to_cycle(step: StepNumber) -> CycleFloat:
-    """Convert step number to cycle position.
+# Validation utilities
+def validate_offset(offset: float) -> float:
+    """Validate offset is in [0.0, 1.0) range.
 
     Args:
-        step: Step number (0-255)
+        offset: Offset value to validate
 
     Returns:
-        Cycle position (0.0-3.996...)
+        The validated offset value
+
+    Raises:
+        ValueError: If offset is not in [0.0, 1.0) range
 
     Example:
-        >>> step_to_cycle(StepNumber(0))
+        >>> validate_offset(0.0)
         0.0
-        >>> step_to_cycle(StepNumber(64))
-        1.0
-        >>> step_to_cycle(StepNumber(256))  # Out of range but demonstrates formula
-        4.0
+        >>> validate_offset(0.5)
+        0.5
+        >>> validate_offset(0.999)
+        0.999
+        >>> validate_offset(1.0)  # doctest: +SKIP
+        ValueError: Offset must be in range [0.0, 1.0), got 1.0
     """
-    return CycleFloat((step / 256.0) * 4.0)
+    if not (0.0 <= offset < 1.0):
+        raise ValueError(f"Offset must be in range [0.0, 1.0), got {offset}")
+    return offset
 
 
-def cycle_to_step(cycle: CycleFloat) -> StepNumber:
-    """Convert cycle position to quantized step number.
-
-    Args:
-        cycle: Cycle position (0.0-4.0)
-
-    Returns:
-        Quantized step number (0-255)
-
-    Example:
-        >>> cycle_to_step(CycleFloat(0.0))
-        0
-        >>> cycle_to_step(CycleFloat(1.0))
-        64
-        >>> cycle_to_step(CycleFloat(3.996))
-        255
-    """
-    return StepNumber(int((cycle / 4.0) * 256))
-
-
+# Conversion utilities
 def step_to_beat(step: StepNumber) -> BeatNumber:
     """Convert step number to beat number.
 

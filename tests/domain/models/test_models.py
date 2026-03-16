@@ -23,25 +23,28 @@ class TestPatternEvent:
         """Test creating a valid event."""
         event = PatternEvent(
             step=0,
-            cycle=0.0,
+            offset=0.0,
             params={"gain": 0.8}
         )
         assert event.step == 0
-        assert event.cycle == 0.0
+        assert event.offset == 0.0
         assert event.params == {"gain": 0.8}
 
     def test_event_step_validation(self):
         """Test step must be 0-255."""
         with pytest.raises(ValidationError, match="step"):
-            PatternEvent(step=-1, cycle=0.0, params={})
+            PatternEvent(step=-1, offset=0.0, params={})
 
         with pytest.raises(ValidationError, match="step"):
-            PatternEvent(step=256, cycle=0.0, params={})
+            PatternEvent(step=256, offset=0.0, params={})
 
-    def test_event_cycle_validation(self):
-        """Test cycle must be >= 0."""
-        with pytest.raises(ValidationError, match="cycle"):
-            PatternEvent(step=0, cycle=-1.0, params={})
+    def test_event_offset_validation(self):
+        """Test offset must be in [0.0, 1.0)."""
+        with pytest.raises(ValidationError, match="offset"):
+            PatternEvent(step=0, offset=-0.1, params={})
+
+        with pytest.raises(ValidationError, match="offset"):
+            PatternEvent(step=0, offset=1.0, params={})
 
 
 class TestPattern:
@@ -56,8 +59,8 @@ class TestPattern:
             client_id="client_001",
             active=True,
             events=[
-                PatternEvent(step=0, cycle=0.0, params={}),
-                PatternEvent(step=64, cycle=1.0, params={"gain": 0.9}),
+                PatternEvent(step=0, offset=0.0, params={}),
+                PatternEvent(step=64, offset=0.0, params={"gain": 0.9}),
             ]
         )
         assert pattern.pattern_id == "3e2b"

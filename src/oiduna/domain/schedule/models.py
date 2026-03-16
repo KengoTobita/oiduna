@@ -26,8 +26,8 @@ class ScheduleEntry:
     Example (SuperDirt entry from MARS):
         >>> entry = ScheduleEntry(
         ...     destination_id="superdirt",
-        ...     cycle=3.5,
         ...     step=56,
+        ...     offset=0.5,
         ...     params={
         ...         "s": "bd",
         ...         "orbit": 0,
@@ -41,8 +41,8 @@ class ScheduleEntry:
     Example (MIDI entry from MARS):
         >>> entry = ScheduleEntry(
         ...     destination_id="volca_bass",
-        ...     cycle=1.0,
         ...     step=0,
+        ...     offset=0.0,
         ...     params={
         ...         "channel": 0,
         ...         "note": 36,  # MIDI note C2
@@ -53,16 +53,16 @@ class ScheduleEntry:
     """
 
     destination_id: str  # "superdirt", "volca_bass", etc.
-    cycle: float  # Timing: cycle position (e.g., 3.5)
     step: int  # Timing: quantized step (0-255)
+    offset: float  # Timing: relative offset within step [0.0, 1.0)
     params: dict[str, Any]  # Generic parameters - no type checking
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary (for JSON serialization)."""
         return {
             "destination_id": self.destination_id,
-            "cycle": self.cycle,
             "step": self.step,
+            "offset": self.offset,
             "params": self.params,
         }
 
@@ -71,8 +71,8 @@ class ScheduleEntry:
         """Create from dictionary (for JSON deserialization)."""
         return cls(
             destination_id=data["destination_id"],
-            cycle=data["cycle"],
             step=data["step"],
+            offset=data.get("offset", 0.0),  # Default to 0.0 for backward compatibility
             params=data["params"],
         )
 

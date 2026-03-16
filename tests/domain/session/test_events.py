@@ -177,7 +177,7 @@ class TestPatternEvents:
             track_id=track.track_id,
             pattern_name="main",
             client_id="client_001",
-            events=[PatternEvent(step=0, cycle=0.0, params={})]
+            events=[PatternEvent(step=0, offset=0.0, params={})]
         )
 
         changes = sink.get_changes_by_type("pattern_created")
