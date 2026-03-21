@@ -1135,6 +1135,87 @@ Enabled for all origins in development. Configure for production deployments.
 
 ---
 
+## Distribution用語とOiduna API用語の対応
+
+Distribution開発者向けの用語マッピングガイド。
+
+### 構造レベル
+
+Oiduna APIは以下の用語を使用します：
+
+| 概念 | Oiduna API用語 | Distribution例 | 説明 |
+|------|---------------|---------------|------|
+| イベント開始位置 | **step** | start, onset, time | 0-255の整数値 |
+| サイクル位置 | **cycle** | cycle, phase | 0.0-4.0の浮動小数点 |
+| 送信先ID | **destination_id** | - | "superdirt", "midi_device"等 |
+| パラメータ | **params** | - | 送信先依存の辞書 |
+
+### paramsレベル（送信先依存）
+
+#### MIDI送信先
+
+| 概念 | Oiduna params | Distribution例 | 範囲 |
+|------|--------------|---------------|------|
+| 音高 | **note** | pitch, note_number | 0-127 (int) |
+| 強さ | **velocity** | velocity, amplitude | 0-127 (int) |
+| 長さ | **duration_ms** | duration, length, gate | ミリ秒 (int) |
+| チャンネル | **channel** | - | 0-15 (int) |
+
+#### SuperDirt送信先
+
+| 概念 | Oiduna params | Distribution例 | 範囲 |
+|------|--------------|---------------|------|
+| サウンド | **s** | sound, sample | 文字列 |
+| 強さ | **gain** | velocity, amplitude | 0.0-1.0 (float) |
+| 持続時間 | **sustain** | duration, length | cycles (float) |
+| オービット | **orbit** | - | 0-11 (int) |
+
+### 用語変換の例
+
+**MARS用語 → Oiduna API**:
+```json
+// MARS内部表現
+{
+  "Start": 64,
+  "Pitch": 60,
+  "Length": 16,
+  "Velocity": 0.8
+}
+
+// Oiduna ScheduledMessage (MIDI)
+{
+  "destination_id": "midi_device",
+  "step": 64,
+  "cycle": 1.0,
+  "params": {
+    "note": 60,
+    "velocity": 102,
+    "duration_ms": 2000,
+    "channel": 0
+  }
+}
+
+// Oiduna ScheduledMessage (SuperDirt)
+{
+  "destination_id": "superdirt",
+  "step": 64,
+  "cycle": 1.0,
+  "params": {
+    "s": "bd",
+    "gain": 0.8,
+    "sustain": 0.25,
+    "orbit": 0
+  }
+}
+```
+
+**参考ドキュメント**:
+- [DISTRIBUTION_GUIDE.md](DISTRIBUTION_GUIDE.md) - Distribution開発ガイド
+- [TERMINOLOGY.md](TERMINOLOGY.md) - 用語集
+- [DATA_MODEL_REFERENCE.md](DATA_MODEL_REFERENCE.md) - データモデル詳細
+
+---
+
 **Document Version**: 1.0
-**Last Updated**: 2026-02-24
+**Last Updated**: 2026-03-21
 **API Version**: 1.0

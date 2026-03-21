@@ -324,6 +324,75 @@ DSL → RuntimeSession → ScheduledMessageBatch
 }
 ```
 
+### Distribution用語とparams用語の対応
+
+多くのDistribution（MARS, TidalCycles風など）は独自の用語体系を持ちます。
+以下はDistribution側の一般的な用語とOiduna params内の用語の対応表です。
+
+#### 構造レベル（ScheduledMessage/Event）
+
+| Distribution一般用語 | Oiduna用語 | 説明 |
+|---------------------|-----------|------|
+| start, onset, time | **step** | イベント開始位置（0-255） |
+| pitch, note_number | params内の **note** | 音高（MIDI） |
+| velocity, amplitude | params内の **velocity** / **gain** | 強さ（送信先依存） |
+| duration, length, gate | params内の **duration_ms** / **sustain** | 長さ（送信先依存） |
+
+#### MIDI送信先params
+
+| Distribution一般用語 | Oiduna params | 変換例 |
+|---------------------|--------------|--------|
+| Pitch (0-127) | note | `params["note"] = pitch` |
+| Velocity (0.0-1.0) | velocity (0-127) | `params["velocity"] = int(velocity * 127)` |
+| Length (steps) | duration_ms | `params["duration_ms"] = length * step_duration_ms` |
+
+**例（MARS → Oiduna）**:
+```python
+# MARS内部表現
+mars_note = {"Start": 0, "Pitch": 60, "Length": 16, "Velocity": 0.8}
+
+# Oiduna ScheduledMessage（MIDI）
+message = ScheduledMessage(
+    destination_id="midi_device",
+    step=mars_note["Start"],              # ← Start → step
+    cycle=mars_note["Start"] / 64.0,
+    params={
+        "note": mars_note["Pitch"],       # ← Pitch → note
+        "velocity": int(mars_note["Velocity"] * 127),  # ← Velocity → velocity
+        "duration_ms": mars_note["Length"] * 125,      # ← Length → duration_ms
+        "channel": 0
+    }
+)
+```
+
+#### SuperDirt送信先params
+
+| Distribution一般用語 | Oiduna params | 変換例 |
+|---------------------|--------------|--------|
+| Velocity (0.0-1.0) | gain | `params["gain"] = velocity` |
+| Length (steps) | sustain (cycles) | `params["sustain"] = length / 64.0` |
+
+**例（MARS → Oiduna）**:
+```python
+# MARS内部表現
+mars_note = {"Start": 0, "Pitch": 7, "Length": 16, "Velocity": 0.8}
+
+# Oiduna ScheduledMessage（SuperDirt）
+message = ScheduledMessage(
+    destination_id="superdirt",
+    step=mars_note["Start"],         # ← Start → step
+    cycle=mars_note["Start"] / 64.0,
+    params={
+        "s": "bd",                   # サウンド名
+        "gain": mars_note["Velocity"],  # ← Velocity → gain
+        "sustain": mars_note["Length"] / 64.0,  # ← Length → sustain (cycles)
+        "orbit": 0
+    }
+)
+```
+
+**Note**: Oiduna自身は用語の変換を行いません。Distribution側で適切な用語マッピングを実施してください。詳細は [DISTRIBUTION_GUIDE.md](DISTRIBUTION_GUIDE.md#distribution用語とoiduna用語の対応) を参照してください。
+
 ---
 
 ## よくある質問

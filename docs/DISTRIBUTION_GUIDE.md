@@ -472,4 +472,144 @@ dependencies = [
 
 ---
 
-**Last Updated**: 2026-02-24
+## Distribution用語とOiduna用語の対応
+
+Distributionは独自の用語体系を持つことができますが、Oidunaへ送信する際は以下の用語マッピングを使用してください。
+
+### 構造レベル（ScheduledMessage/Event）
+
+| Distribution一般用語 | Oiduna用語 | 説明 |
+|---------------------|-----------|------|
+| start, onset, time | **step** | イベントの開始位置（0-255） |
+| cycle, phase | **cycle** | サイクル位置（float） |
+
+**例（MARS用語 → Oiduna用語）**:
+```typescript
+// MARS内部表現
+const marsNote = {
+  Start: 64,      // 開始位置
+  Pitch: 60,      // 音高
+  Length: 16,     // 長さ（steps）
+  Velocity: 0.8   // 強さ
+};
+
+// Oiduna ScheduledMessage（MIDI）
+const message = {
+  destination_id: "midi_device",
+  step: marsNote.Start,              // ← Start → step
+  cycle: marsNote.Start / 64.0,
+  params: {
+    note: marsNote.Pitch,            // ← Pitch → note
+    velocity: Math.round(marsNote.Velocity * 127),  // ← Velocity → velocity
+    duration_ms: marsNote.Length * 125,  // ← Length → duration_ms (125ms/step @ 120BPM)
+    channel: 0
+  }
+};
+```
+
+### paramsレベル（送信先依存）
+
+#### MIDI送信先
+
+| Distribution一般用語 | Oiduna params内 | 型・範囲 |
+|---------------------|----------------|---------|
+| pitch, note_number | **note** | int (0-127) |
+| velocity, amplitude | **velocity** | int (0-127) |
+| duration, length, gate | **duration_ms** | int (ミリ秒) |
+
+#### SuperDirt送信先
+
+| Distribution一般用語 | Oiduna params内 | 型・範囲 |
+|---------------------|----------------|---------|
+| sound, sample | **s** | str (サウンド名) |
+| velocity, amplitude, gain | **gain** | float (0.0-1.0) |
+| duration, sustain | **sustain** | float (cycles) |
+
+### 用語選択のガイドライン
+
+1. **構造レベルはOiduna用語を使用** - `step`, `cycle`, `destination_id`, `params`
+2. **params内は送信先のネイティブ用語を尊重** - MIDI仕様、SuperDirt仕様に従う
+3. **Distribution内部では独自用語を使用可能** - 最終的にOiduna用語に変換すればよい
+
+### 実装例（TypeScript）
+
+```typescript
+interface OidunaMapper {
+  // MARS用語 → Oiduna用語の変換
+  mapToScheduledMessage(
+    marsNote: { Start: number; Pitch: number; Length: number; Velocity: number },
+    destinationId: string,
+    bpm: number
+  ): ScheduledMessage {
+    const stepDurationMs = 60000 / bpm / 4;  // 1ステップの長さ（ms）
+
+    if (destinationId === 'superdirt') {
+      return {
+        destination_id: 'superdirt',
+        step: marsNote.Start,      // ← Start → step
+        cycle: marsNote.Start / 64.0,
+        params: {
+          s: 'bd',
+          gain: marsNote.Velocity, // ← Velocity → gain
+          sustain: marsNote.Length / 64.0  // ← Length → sustain (cycles)
+        }
+      };
+    } else if (destinationId.startsWith('midi_')) {
+      return {
+        destination_id: destinationId,
+        step: marsNote.Start,      // ← Start → step
+        cycle: marsNote.Start / 64.0,
+        params: {
+          note: marsNote.Pitch,    // ← Pitch → note
+          velocity: Math.round(marsNote.Velocity * 127),  // ← Velocity → velocity (0-127)
+          duration_ms: marsNote.Length * stepDurationMs,  // ← Length → duration_ms
+          channel: 0
+        }
+      };
+    }
+
+    throw new Error(`Unknown destination: ${destinationId}`);
+  }
+}
+```
+
+### 参考: ScheduledMessageBatch形式
+
+現在のOidunaはScheduledMessageBatch形式でパターンデータを受け取ります：
+
+```json
+{
+  "messages": [
+    {
+      "destination_id": "superdirt",
+      "cycle": 0.0,
+      "step": 0,
+      "params": {
+        "s": "bd",
+        "gain": 0.8,
+        "orbit": 0
+      }
+    },
+    {
+      "destination_id": "midi_device",
+      "cycle": 1.0,
+      "step": 64,
+      "params": {
+        "note": 60,
+        "velocity": 100,
+        "duration_ms": 250,
+        "channel": 0
+      }
+    }
+  ],
+  "bpm": 120.0,
+  "pattern_length": 4.0,
+  "destinations": ["superdirt", "midi_device"]
+}
+```
+
+詳細は [DATA_MODEL_REFERENCE.md](DATA_MODEL_REFERENCE.md) と [TERMINOLOGY.md](TERMINOLOGY.md) を参照してください。
+
+---
+
+**Last Updated**: 2026-03-21
